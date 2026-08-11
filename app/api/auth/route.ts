@@ -2,15 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
-import { query, getOne } from '@/lib/db'
-
-function getJwtSecret(): string {
-  const secret = process.env.JWT_SECRET
-  if (!secret) {
-    throw new Error('JWT_SECRET no configurado en las variables de entorno')
-  }
-  return secret
-}
+import { getOne } from '@/lib/db'
+import { getJwtSecret } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
   try {

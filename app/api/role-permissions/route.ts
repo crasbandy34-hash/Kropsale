@@ -1,8 +1,19 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server'
 import { query, run } from '@/lib/db'
+import { requireAuth, requireRole } from '@/lib/auth'
+
+function adminGuard(request: NextRequest) {
+  return requireAuth(request).then(auth => {
+    if (auth instanceof NextResponse) return auth
+    const denied = requireRole(auth.user, ['Administrador'])
+    return denied || auth
+  })
+}
 
 export async function GET(request: NextRequest) {
+  const guard = await adminGuard(request)
+  if (guard instanceof NextResponse) return guard
   try {
     const rows = await query(
       'SELECT rp.role_id, rp.permission_id, r.name AS role_name, p.name AS permission_name FROM role_permissions rp LEFT JOIN roles r ON r.id = rp.role_id LEFT JOIN permissions p ON p.id = rp.permission_id'
@@ -14,6 +25,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const guard = await adminGuard(request)
+  if (guard instanceof NextResponse) return guard
   try {
     const data = await request.json()
     const roleId = parseInt(data.role_id || data.roleId || '0')
@@ -27,6 +40,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  const guard = await adminGuard(request)
+  if (guard instanceof NextResponse) return guard
   try {
     const { searchParams } = new URL(request.url)
     const roleId = parseInt(searchParams.get('role_id') || '0')
@@ -46,6 +61,8 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const guard = await adminGuard(request)
+  if (guard instanceof NextResponse) return guard
   try {
     const { searchParams } = new URL(request.url)
     const roleId = parseInt(searchParams.get('role_id') || '0')

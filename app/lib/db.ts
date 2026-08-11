@@ -152,6 +152,13 @@ export function isTursoMode(): boolean {
 
 let clientPromise: Promise<any> | null = null
 
+function rowToObj(r: any): any {
+  if (!r) return r
+  if (typeof r.toJSON === 'function') return r.toJSON()
+  if (typeof r === 'object') return r
+  return r
+}
+
 function getClient() {
   if (!clientPromise) {
     clientPromise = (async () => {
@@ -163,6 +170,9 @@ function getClient() {
       await ensureTursoSchema(client)
       return client
     })()
+    clientPromise.catch(() => {
+      clientPromise = null
+    })
   }
   return clientPromise
 }
@@ -179,7 +189,7 @@ async function ensureTursoSchema(client: any) {
     await client.execute(stmt)
   }
   const count = await client.execute('SELECT COUNT(*) AS c FROM roles')
-  const row = count.rows[0].toJSON()
+  const row = rowToObj(count.rows[0])
   if (Number(row.c) === 0) {
     for (const r of DEFAULT_ROLES) {
       await client.execute({ sql: 'INSERT INTO roles (name, description) VALUES (?, ?)', args: [r.name, r.description] })
@@ -187,16 +197,16 @@ async function ensureTursoSchema(client: any) {
     for (const p of DEFAULT_PERMISSIONS) {
       await client.execute({ sql: 'INSERT INTO permissions (name, module) VALUES (?, ?)', args: [p.name, p.module] })
     }
-    const adminRole = (await client.execute("SELECT id FROM roles WHERE name = 'Administrador'")).rows[0].toJSON().id
+    const adminRole = rowToObj((await client.execute("SELECT id FROM roles WHERE name = 'Administrador'")).rows[0]).id
     await client.execute('INSERT INTO role_permissions (role_id, permission_id) SELECT ?, id FROM permissions', [adminRole])
-    const sellerRole = (await client.execute("SELECT id FROM roles WHERE name = 'Vendedor'")).rows[0].toJSON().id
+    const sellerRole = rowToObj((await client.execute("SELECT id FROM roles WHERE name = 'Vendedor'")).rows[0]).id
     await client.execute(
       `INSERT INTO role_permissions (role_id, permission_id)
        SELECT ?, id FROM permissions
        WHERE name NOT LIKE 'users.%' AND name NOT LIKE 'roles.%' AND name != 'reports.view' AND name != 'classifications.view' AND name != 'settings.edit'`,
       [sellerRole]
     )
-    const buyerRole = (await client.execute("SELECT id FROM roles WHERE name = 'Comprador'")).rows[0].toJSON().id
+    const buyerRole = rowToObj((await client.execute("SELECT id FROM roles WHERE name = 'Comprador'")).rows[0]).id
     await client.execute(
       `INSERT INTO role_permissions (role_id, permission_id)
        SELECT ?, id FROM permissions
@@ -217,17 +227,21 @@ async function ensureTursoSchema(client: any) {
 
 async function tursoQuery(sql: string, params: any[] = []): Promise<any[]> {
   const res = await (await getClient()).execute({ sql, args: params })
-  return res.rows.map((r: any) => r.toJSON())
+  return res.rows.map((r: any) => rowToObj(r))
+}
+
+function toNum(v: any): any {
+  return typeof v === 'bigint' ? Number(v) : v
 }
 
 async function tursoRun(sql: string, params: any[] = []): Promise<any> {
   const res = await (await getClient()).execute({ sql, args: params })
-  return { changes: Number(res.rowsAffected) || 0, lastRowID: res.lastInsertRowid ?? null }
+  return { changes: toNum(res.rowsAffected) || 0, lastRowID: toNum(res.lastInsertRowid) ?? null }
 }
 
 async function tursoGetOne(sql: string, params: any[] = []): Promise<any | null> {
   const res = await (await getClient()).execute({ sql, args: params })
-  return res.rows.length ? res.rows[0].toJSON() : null
+  return res.rows.length ? rowToObj(res.rows[0]) : null
 }
 
 // ---------------------------------------------------------------------------

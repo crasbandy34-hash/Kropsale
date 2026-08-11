@@ -61,8 +61,8 @@ export async function PUT(request: NextRequest) {
     }
     const updates = ['status = ?']
     const params: any[] = [status]
-    if (status === 'ongoing') { updates.push('answered_at = datetime("now")') }
-    if (status === 'ended') { updates.push('ended_at = datetime("now")') }
+    if (status === 'ongoing') { updates.push("answered_at = datetime('now')") }
+    if (status === 'ended') { updates.push("ended_at = datetime('now')") }
     params.push(id)
     await run(`UPDATE calls SET ${updates.join(', ')} WHERE id = ?`, params)
     return NextResponse.json({ success: true })

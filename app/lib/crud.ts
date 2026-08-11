@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server'
 import { query, run, getOne } from '@/lib/db'
+import { requireAuth, requireRole } from '@/lib/auth'
 
 export interface CrudOptions {
   table: string
@@ -8,14 +9,34 @@ export interface CrudOptions {
   insertFields?: string[]
   updateFields?: string[]
   excludeFields?: string[]
+  /** GET público (catálogo): no requiere token */
+  publicRead?: boolean
+  /** Roles permitidos para escribir. Vacío = cualquier usuario autenticado */
+  writeRoles?: string[]
+  /** Roles permitidos para GET (si publicRead es false). Vacío = cualquier autenticado */
+  readRoles?: string[]
+  /** Solo administrador */
+  adminOnly?: boolean
 }
 
 export function createCrudHandler(opts: CrudOptions) {
   const table = opts.table
   const idColumn = opts.idColumn || 'id'
 
+  function denyIfRoles(user: any, roles?: string[]): NextResponse | null {
+    if (opts.adminOnly) return requireRole(user, ['Administrador'])
+    if (roles && roles.length > 0) return requireRole(user, roles)
+    return null
+  }
+
   async function GET(request: NextRequest) {
     try {
+      if (!opts.publicRead) {
+        const auth = await requireAuth(request)
+        if (auth instanceof NextResponse) return auth
+        const denied = denyIfRoles(auth.user, opts.readRoles)
+        if (denied) return denied
+      }
       const rows = await query(`SELECT * FROM ${table}`)
       return NextResponse.json(rows)
     } catch (error: any) {
@@ -24,6 +45,10 @@ export function createCrudHandler(opts: CrudOptions) {
   }
 
   async function POST(request: NextRequest) {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const denied = denyIfRoles(auth.user, opts.writeRoles)
+    if (denied) return denied
     try {
       const data = await request.json()
       const fields = Object.keys(data).filter(k => !(opts.excludeFields || []).includes(k))
@@ -40,6 +65,10 @@ export function createCrudHandler(opts: CrudOptions) {
   }
 
   async function PUT(request: NextRequest) {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const denied = denyIfRoles(auth.user, opts.writeRoles)
+    if (denied) return denied
     try {
       const { searchParams } = new URL(request.url)
       const id = parseInt(searchParams.get('id') || '0')
@@ -58,6 +87,10 @@ export function createCrudHandler(opts: CrudOptions) {
   }
 
   async function DELETE(request: NextRequest) {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const denied = denyIfRoles(auth.user, opts.writeRoles)
+    if (denied) return denied
     try {
       const { searchParams } = new URL(request.url)
       const id = parseInt(searchParams.get('id') || '0')

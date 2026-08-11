@@ -1,10 +1,15 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth, requireRole } from '@/lib/auth'
 
 const ALLOWED = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg']
 const MAX_SIZE = 4.5 * 1024 * 1024
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req)
+  if (auth instanceof NextResponse) return auth
+  const denied = requireRole(auth.user, ['Administrador', 'Vendedor'])
+  if (denied) return denied
   try {
     const form = await req.formData()
     const file = form.get('file')

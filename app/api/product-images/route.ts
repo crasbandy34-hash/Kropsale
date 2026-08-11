@@ -1,4 +1,4 @@
 // @ts-nocheck
 import { createCrudHandler } from '@/lib/crud'
 
-export const { GET, POST, PUT, DELETE } = createCrudHandler({ table: 'product_image' })
+export const { GET, POST, PUT, DELETE } = createCrudHandler({ table: 'product_image', publicRead: true, writeRoles: ['Administrador', 'Vendedor'] })
