@@ -146,6 +146,12 @@ export function isTursoMode(): boolean {
   return !!process.env.TURSO_URL
 }
 
+export function assertDbReady(): void {
+  if (!isTursoMode() && process.env.NODE_ENV === 'production') {
+    throw new Error('TURSO_URL no configurado en producción. En Vercel usa Turso; sql.js solo es para desarrollo local.')
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Modo Turso (producción / Vercel)
 // ---------------------------------------------------------------------------
@@ -394,6 +400,7 @@ async function withDb<T>(fn: (db: any) => T): Promise<T> {
 
 export async function query(sql: string, params: any[] = []): Promise<any[]> {
   if (isTursoMode()) return tursoQuery(sql, params)
+  assertDbReady()
   return withDb((db) => {
     const stmt = db.prepare(sql)
     if (params.length > 0) stmt.bind(params)
@@ -408,6 +415,7 @@ export async function query(sql: string, params: any[] = []): Promise<any[]> {
 
 export async function run(sql: string, params: any[] = []): Promise<any> {
   if (isTursoMode()) return tursoRun(sql, params)
+  assertDbReady()
   return withDb((db) => {
     const stmt = db.prepare(sql)
     if (params.length > 0) stmt.bind(params)
@@ -425,6 +433,7 @@ export async function run(sql: string, params: any[] = []): Promise<any> {
 
 export async function getOne(sql: string, params: any[] = []): Promise<any | null> {
   if (isTursoMode()) return tursoGetOne(sql, params)
+  assertDbReady()
   return withDb((db) => {
     const stmt = db.prepare(sql)
     if (params.length > 0) stmt.bind(params)

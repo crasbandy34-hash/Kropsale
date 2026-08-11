@@ -34,6 +34,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ url: blob.url })
     }
 
+    if (process.env.NODE_ENV === 'production') {
+      return NextResponse.json(
+        { error: 'BLOB_READ_WRITE_TOKEN no configurado. En producción las imágenes deben subirse a Vercel Blob.' },
+        { status: 500 }
+      )
+    }
+
     const fs = await import('fs')
     const path = await import('path')
     const dir = path.join(process.cwd(), 'public', 'uploads')

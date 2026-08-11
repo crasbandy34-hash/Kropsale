@@ -64,7 +64,7 @@ export default function NotificationsPage() {
           } : {
             id: `sale-${s.id}`, icon: 'fa-store', color: '#8B7D6B',
             title: 'Nueva venta',
-            desc: `${buyers ? `${buyers.first_name} ${buyers.last_name}` : 'Un comprador'} compró ${s.quantity || 1} x ${p ? p.title : 'tu producto'}.`,
+            desc: `${buyers ? `${buyers.firstName} ${buyers.lastName}` : 'Un comprador'} compró ${s.quantity || 1} x ${p ? p.title : 'tu producto'}.`,
             time: timeAgo(s.created_at), ts: tsOf(s.created_at), read: true, href: `/sales/${s.id}`,
           })
         }

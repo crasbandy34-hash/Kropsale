@@ -26,7 +26,7 @@ export const fallbackImg = '/images/placeholder-1.svg'
 export function localImg(u?: string): string {
   if (!u) return fallbackImg
   if (u.startsWith('/')) return u
-  if (u.startsWith('https://') && u.includes('blob.vercel-storage.com')) return u
+  if (u.startsWith('http://') || u.startsWith('https://')) return u
   return fallbackImg
 }
 

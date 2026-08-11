@@ -30,7 +30,7 @@ export default function SaleDetailPage() {
         const price = prod ? Number(prod.price) : 0
         setSale({
           id: `V-${String(s.id).padStart(3, '0')}`,
-          buyer: buyer ? `${buyer.first_name} ${buyer.last_name}` : '-',
+          buyer: buyer ? `${buyer.firstName} ${buyer.lastName}` : '-',
           email: buyer?.email || '-',
           date: fmtDate(s.created_at),
           status: rated ? 'Completado' : 'Pendiente',

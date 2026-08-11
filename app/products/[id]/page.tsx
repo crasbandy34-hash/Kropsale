@@ -36,6 +36,7 @@ export default function ProductDetailPage() {
         const img = imgs.find((i: any) => i.product_id === p.id && i.is_main) || imgs.find((i: any) => i.product_id === p.id)
         setProduct({
           id: p.id,
+          sellerId: p.seller_id,
           name: p.title,
           category: cat ? cat.name : 'General',
           price: `$${Number(p.price).toFixed(2)}`,
@@ -212,15 +213,26 @@ export default function ProductDetailPage() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 8, flexWrap: 'wrap' }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: '50%', background: 'var(--accent-amber)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#000'
-            }}>
-              <i className="fas fa-user" />
-            </div>
-            <div style={{ fontSize: 13 }}>
-              <span style={{ fontWeight: 600 }}>{product.farmer}</span>
-              <span style={{ color: '#8B949E', fontSize: 11, marginLeft: 6 }}>{product.location}</span>
+            <div
+              onClick={handleContact}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10, cursor: role === 'Comprador' ? 'pointer' : 'default',
+                borderRadius: 8, padding: 2, transition: 'background .2s ease'
+              }}
+              onMouseOver={(e) => { if (role === 'Comprador') e.currentTarget.style.background = 'rgba(212,168,67,0.08)' }}
+              onMouseOut={(e) => { e.currentTarget.style.background = 'transparent' }}
+            >
+              <div style={{
+                width: 36, height: 36, borderRadius: '50%', background: 'var(--accent-amber)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#000'
+              }}>
+                <i className="fas fa-user" />
+              </div>
+              <div style={{ fontSize: 13 }}>
+                <span style={{ fontWeight: 600 }}>{product.farmer}</span>
+                <span style={{ color: '#8B949E', fontSize: 11, marginLeft: 6 }}>{product.location}</span>
+              </div>
+              {role === 'Comprador' && <i className="fas fa-comment" style={{ color: '#D4A843', fontSize: 11 }} />}
             </div>
             {role === 'Comprador' && (
               <button onClick={handleContact} style={{

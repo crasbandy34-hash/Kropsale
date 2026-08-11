@@ -16,17 +16,12 @@ export default function ConversationsPage() {
     if (!user?.id) return
     ;(async () => {
       try {
-        const [all, msgs, users, roles, prods] = await Promise.all([
+        const [all, msgs, users, prods] = await Promise.all([
           api.get('/api/conversations').catch(() => []),
           api.get('/api/messages').catch(() => []),
           api.get('/api/users').catch(() => []),
-          api.get('/api/roles').catch(() => []),
           api.get('/api/products').catch(() => []),
         ])
-        const roleName = (id: number) => {
-          const r = roles.find((x: any) => x.id === id)
-          return r ? r.name.replace('a', '') : 'Usuario'
-        }
         const mine = all.filter((c: any) => {
           if (user.role === 'Comprador') return c.buyer_id === user.id
           if (user.role === 'Vendedor') return c.seller_id === user.id
@@ -39,7 +34,7 @@ export default function ConversationsPage() {
           const last = convMsgs[convMsgs.length - 1]
           const unread = convMsgs.filter((m: any) => m.sender_id !== user.id && !Number(m.is_read)).length
           const prod: any = prods.find((p: any) => p.id === c.product_id)
-          const fullName = other ? `${other.first_name} ${other.last_name}` : 'Usuario'
+          const fullName = other ? `${other.firstName} ${other.lastName}` : 'Usuario'
           return {
             id: c.id,
             name: fullName,
@@ -48,7 +43,7 @@ export default function ConversationsPage() {
             time: last ? fmtTime(last.sent_at) : 'Nuevo',
             unread,
             online: false,
-            role: other ? roleName(other.role_id) : 'Usuario',
+            role: other ? (other.role || 'Usuario') : 'Usuario',
             subject: prod ? prod.title : '',
           }
         }))

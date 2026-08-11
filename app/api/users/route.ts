@@ -7,15 +7,24 @@ import { requireAuth, requireRole } from '@/lib/auth'
 const REGISTRABLE_ROLES = ['Vendedor', 'Comprador']
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAuth(request)
-  if (auth instanceof NextResponse) return auth
-  const denied = requireRole(auth.user, ['Administrador'])
-  if (denied) return denied
   try {
+    const auth = await requireAuth(request)
+    let isAdmin = false
+    if (!(auth instanceof NextResponse) && auth.user?.role === 'Administrador') {
+      isAdmin = true
+    }
     const rows = await query(
       'SELECT u.id, u.first_name, u.last_name, u.email, u.location, r.name AS role, u.role_id, u.is_active, u.created_at FROM users u LEFT JOIN roles r ON r.id = u.role_id'
     )
-    const users = rows.map((r: any) => ({ id: r.id, firstName: r.first_name, lastName: r.last_name, email: r.email, location: r.location, role: r.role, isActive: !!r.is_active, createdAt: r.created_at }))
+    const users = rows.map((r: any) => {
+      const base: any = { id: r.id, firstName: r.first_name, lastName: r.last_name, location: r.location, role: r.role }
+      if (isAdmin) {
+        base.email = r.email
+        base.isActive = !!r.is_active
+        base.createdAt = r.created_at
+      }
+      return base
+    })
     return NextResponse.json(users)
   } catch (error) {
     return NextResponse.json({ error: 'Error al obtener usuarios' }, { status: 500 })

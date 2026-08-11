@@ -39,7 +39,7 @@ export default function SalesPage() {
           return {
             id: `V-${String(s.id).padStart(3, '0')}`,
             num: s.id,
-            buyer: buyer ? `${buyer.first_name} ${buyer.last_name}` : '-',
+            buyer: buyer ? `${buyer.firstName} ${buyer.lastName}` : '-',
             items: qty,
             total: `$${total.toFixed(2)}`,
             status: rated ? 'Completado' : 'Pendiente',

@@ -5,7 +5,7 @@ import { useApi, localImg } from '@/lib/apiClient'
 import Layout from '@/components/Layout'
 
 export default function InventoryPage() {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
   const api = useApi()
   const [products, setProducts] = useState<any[]>([])
   const [showModal, setShowModal] = useState(false)
@@ -60,7 +60,11 @@ export default function InventoryPage() {
     fd.append('file', file)
     setUploading(true)
     try {
-      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al subir imagen')
       setForm({ ...form, image: data.url })

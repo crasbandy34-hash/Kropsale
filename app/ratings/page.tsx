@@ -35,11 +35,11 @@ export default function RatingsPage() {
           return {
             id: r.id,
             product: prod ? prod.title : '-',
-            seller: seller ? `${seller.first_name} ${seller.last_name}` : '-',
+            seller: seller ? `${seller.firstName} ${seller.lastName}` : '-',
             rating: Number(r.score),
             comment: r.comment || '-',
             date: fmtDate(r.created_at),
-            user: reviewer ? `${reviewer.first_name} ${reviewer.last_name.charAt(0)}.` : '-',
+            user: reviewer ? `${reviewer.firstName} ${reviewer.lastName.charAt(0)}.` : '-',
           }
         }))
         if (user.role === 'Comprador') {
@@ -52,7 +52,7 @@ export default function RatingsPage() {
               id: s.id,
               title: prod ? prod.title : '-',
               sellerId: prod?.seller_id,
-              seller: seller ? `${seller.first_name} ${seller.last_name}` : '-',
+              seller: seller ? `${seller.firstName} ${seller.lastName}` : '-',
             }
           }))
           if (missing.length > 0) {
@@ -106,10 +106,10 @@ export default function RatingsPage() {
         const reviewer: any = users.find((u: any) => u.id === r.reviewer_id)
         return {
           id: r.id, product: prod ? prod.title : '-',
-          seller: seller ? `${seller.first_name} ${seller.last_name}` : '-',
+          seller: seller ? `${seller.firstName} ${seller.lastName}` : '-',
           rating: Number(r.score), comment: r.comment || '-',
           date: fmtDate(r.created_at),
-          user: reviewer ? `${reviewer.first_name} ${reviewer.last_name.charAt(0)}.` : '-',
+          user: reviewer ? `${reviewer.firstName} ${reviewer.lastName.charAt(0)}.` : '-',
         }
       }))
     } catch (e: any) {
