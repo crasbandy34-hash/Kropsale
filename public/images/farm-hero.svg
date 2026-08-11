@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="600" viewBox="0 0 1400 600">
+  <rect width="1400" height="600" fill="#1a2332"/>
+  <circle cx="1150" cy="110" r="60" fill="#d4a843"/>
+  <path d="M0 420 q180 -80 380 -20 q220 60 420 0 q210 -70 400 10 l200 40 v190 h-1400z" fill="#223047"/>
+  <path d="M0 480 q200 -60 420 -10 q240 60 460 0 q220 -60 420 0 l100 30 v130 h-1400z" fill="#2c3b50"/>
+  <path d="M120 560 l10 -60 l10 60z" fill="#8b7d6b"/>
+  <path d="M140 560 l10 -60 l10 60z" fill="#8b7d6b"/>
+  <path d="M160 560 l10 -60 l10 60z" fill="#8b7d6b"/>
+  <path d="M260 550 l10 -50 l10 50z" fill="#8b7d6b"/>
+  <path d="M280 550 l10 -50 l10 50z" fill="#8b7d6b"/>
+  <path d="M400 560 l10 -60 l10 60z" fill="#8b7d6b"/>
+  <path d="M420 560 l10 -60 l10 60z" fill="#8b7d6b"/>
+  <path d="M700 555 l10 -55 l10 55z" fill="#8b7d6b"/>
+  <path d="M720 555 l10 -55 l10 55z" fill="#8b7d6b"/>
+  <path d="M900 560 l10 -60 l10 60z" fill="#8b7d6b"/>
+  <path d="M920 560 l10 -60 l10 60z" fill="#8b7d6b"/>
+  <path d="M1050 550 l10 -50 l10 50z" fill="#8b7d6b"/>
+  <path d="M1070 550 l10 -50 l10 50z" fill="#8b7d6b"/>
+</svg>

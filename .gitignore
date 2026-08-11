@@ -1,0 +1,30 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+
+# base de datos local (solo desarrollo; en producción usa Turso)
+/data/
+
+# imágenes subidas localmente (en producción usa Vercel Blob)
+/public/uploads/
+
+# variables de entorno (nunca subir secretos)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# misc
+*.log
+npm-debug.log*
+.DS_Store
+.vercel
+# script local de seed con credenciales de demo
+/scripts/seed.js
+
