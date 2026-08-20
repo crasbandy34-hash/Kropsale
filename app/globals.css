@@ -43,7 +43,7 @@ tr:hover{background-color:rgba(255,255,255,0.03)}
 .show-mob-block{display:block!important}
 @media(max-width:768px){
 :root{--sidebar-width:0px}
-body{padding-bottom:60px}
+body{padding-bottom:calc(60px + env(safe-area-inset-bottom,0px))}
 .hide-mob{display:none!important}
 .show-mob{display:flex!important}
 .show-mob-block{display:none!important}
@@ -52,7 +52,7 @@ body{padding-bottom:60px}
 .flex-wrap{flex-direction:column!important;align-items:stretch!important}
 .btn-full{width:100%!important;justify-content:center!important}
 .auth-hero{flex:none!important;min-height:260px!important}
-.convo-height{height:calc(100vh - 190px);min-height:300px!important}
+.convo-height{height:calc(100dvh - 190px);min-height:300px!important}
 .convo-msgs{flex:1;min-height:0!important;overflow-y:auto!important;max-height:none!important}
 .convo-msg-maxw{max-width:180px!important}
 .prod-img{height:240px!important}}
@@ -61,7 +61,7 @@ body{padding-bottom:60px}
 .main-pad{padding:18px!important}}
 @media(min-width:768px){
 .auth-hero{flex:1!important;min-height:auto!important}
-.convo-height{height:calc(100vh - 230px);min-height:420px!important;max-height:680px!important}
+.convo-height{height:calc(100dvh - 230px);min-height:420px!important;max-height:680px!important}
 .convo-msgs{flex:1;min-height:0!important;overflow-y:auto!important;max-height:none!important}
 .convo-msg-maxw{max-width:320px!important}
 .prod-img{height:360px!important}}

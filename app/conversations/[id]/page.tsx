@@ -121,6 +121,32 @@ export default function ConversationDetailPage() {
   }, [activeCall?.status === 'ongoing'])
 
   useEffect(() => {
+    if (!user?.id) return
+    let ignore = false
+    const t = setInterval(async () => {
+      try {
+        const msgs = await api.get('/api/messages').catch(() => [])
+        if (ignore) return
+        const convMs = msgs
+          .filter((m: any) => m.conversation_id === idNum)
+          .sort((a: any, b: any) => (a.sent_at || '').localeCompare(b.sent_at || ''))
+        setMessages(convMs.map((m: any) => ({
+          id: m.id,
+          from: m.sender_id === user.id ? 'me' : 'them',
+          text: m.content,
+          time: fmtTime(m.sent_at),
+        })))
+        for (const m of convMs) {
+          if (m.sender_id !== user.id && !Number(m.is_read)) {
+            await api.put(`/api/messages?id=${m.id}`, { is_read: 1 }).catch(() => {})
+          }
+        }
+      } catch { }
+    }, 3000)
+    return () => { ignore = true; clearInterval(t) }
+  }, [user?.id, idNum])
+
+  useEffect(() => {
     if (!activeCall) return
     const t = setInterval(async () => {
       try {
