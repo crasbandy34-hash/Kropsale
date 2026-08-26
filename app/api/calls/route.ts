@@ -1,10 +1,13 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server'
 import { query, run } from '@/lib/db'
+import { requireAuth } from '@/lib/auth'
 
 const ACTIVE = ["status IN ('ringing','ongoing')"]
 
 export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request)
+  if (auth instanceof NextResponse) return auth
   try {
     const { searchParams } = new URL(request.url)
     const conversationId = parseInt(searchParams.get('conversation_id') || '0')
@@ -21,11 +24,13 @@ export async function GET(request: NextRequest) {
     const rows = await query(sql, params)
     return NextResponse.json(rows)
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Error al obtener llamadas' }, { status: 500 })
+    return NextResponse.json({ error: 'Error al obtener llamadas' }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth(request)
+  if (auth instanceof NextResponse) return auth
   try {
     const data = await request.json()
     const conversationId = parseInt(data.conversation_id || data.conversationId || '0')
@@ -34,6 +39,9 @@ export async function POST(request: NextRequest) {
     const type = data.type === 'video' ? 'video' : 'voice'
     if (!conversationId || !callerId || !calleeId) {
       return NextResponse.json({ error: 'conversation_id, caller_id y callee_id son requeridos' }, { status: 400 })
+    }
+    if (callerId !== auth.user.id) {
+      return NextResponse.json({ error: 'No puedes iniciar llamadas por otro usuario' }, { status: 403 })
     }
     const active = await query('SELECT id FROM calls WHERE conversation_id = ? AND status IN (?, ?)', [conversationId, 'ringing', 'ongoing'])
     if (active.length > 0) {
@@ -45,11 +53,13 @@ export async function POST(request: NextRequest) {
     )
     return NextResponse.json({ id: result.lastRowID, status: 'ringing' }, { status: 201 })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Error al iniciar llamada' }, { status: 500 })
+    return NextResponse.json({ error: 'Error al iniciar llamada' }, { status: 500 })
   }
 }
 
 export async function PUT(request: NextRequest) {
+  const auth = await requireAuth(request)
+  if (auth instanceof NextResponse) return auth
   try {
     const { searchParams } = new URL(request.url)
     const id = parseInt(searchParams.get('id') || '0')
@@ -67,11 +77,13 @@ export async function PUT(request: NextRequest) {
     await run(`UPDATE calls SET ${updates.join(', ')} WHERE id = ?`, params)
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Error al actualizar llamada' }, { status: 500 })
+    return NextResponse.json({ error: 'Error al actualizar llamada' }, { status: 500 })
   }
 }
 
 export async function DELETE(request: NextRequest) {
+  const auth = await requireAuth(request)
+  if (auth instanceof NextResponse) return auth
   try {
     const { searchParams } = new URL(request.url)
     const id = parseInt(searchParams.get('id') || '0')

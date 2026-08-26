@@ -1,6 +1,7 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useAuth } from '@/context/AuthContext'
+import { useApi, localImg } from '@/lib/apiClient'
 import Layout from '@/components/Layout'
 
 function AdminSettings() {
@@ -55,7 +56,9 @@ function BuyerSettings() {
 }
 
 export default function SettingsPage() {
-  const { user } = useAuth()
+  const { user, updateUser } = useAuth()
+  const api = useApi()
+  const fileRef = useRef<HTMLInputElement>(null)
   const [form, setForm] = useState({
     firstName: user?.firstName || 'Usuario',
     lastName: user?.lastName || '',
@@ -65,17 +68,60 @@ export default function SettingsPage() {
     phone: '',
     bio: ''
   })
+  const [profileImage, setProfileImage] = useState<string | null>(user?.profileImage || null)
+  const [uploading, setUploading] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   function update(field: string, value: string) {
     setForm(prev => ({ ...prev, [field]: value }))
     setSaved(false)
   }
 
-  function handleSave(e: React.FormEvent) {
+  async function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const fd = new FormData()
+    fd.append('file', file)
+    setUploading(true)
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${user ? document.cookie.match(/kopsale_token=([^;]+)/)?.[1] || '' : ''}` },
+        body: fd,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al subir imagen')
+      setProfileImage(data.url)
+      if (user) {
+        await api.put(`/api/users?id=${user.id}`, { profileImage: data.url })
+        updateUser({ profileImage: data.url })
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error al subir imagen')
+    }
+    setUploading(false)
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+    if (!user) return
+    setSaving(true)
+    try {
+      await api.put(`/api/users?id=${user.id}`, {
+        firstName: form.firstName,
+        lastName: form.lastName,
+        location: form.location,
+        profileImage: profileImage,
+      })
+      updateUser({ firstName: form.firstName, lastName: form.lastName, location: form.location, profileImage: profileImage || undefined })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err: any) {
+      alert(err.message || 'Error al guardar')
+    }
+    setSaving(false)
   }
 
   return (
@@ -102,17 +148,28 @@ export default function SettingsPage() {
       <div style={{ background: '#1e2a3a', borderRadius: 10, border: '1px solid var(--border-color)', padding: 18, marginTop: 14 }}>
         <form onSubmit={handleSave}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16, flexWrap: 'wrap' }}>
-            <div style={{
-              width: 56, height: 56, borderRadius: '50%', background: 'var(--accent-amber)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700, color: '#000', flexShrink: 0
-            }}>{form.firstName[0]}{form.lastName?.[0]}</div>
+            <div onClick={() => !uploading && fileRef.current?.click()} style={{
+              width: 56, height: 56, borderRadius: '50%', background: profileImage ? 'transparent' : 'var(--accent-amber)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700, color: '#000', flexShrink: 0,
+              cursor: 'pointer', overflow: 'hidden', border: '2px solid var(--border-color)', position: 'relative'
+            }}>
+              {profileImage ? (
+                <img src={localImg(profileImage)} alt="Perfil" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <span>{form.firstName[0]}{form.lastName?.[0]}</span>
+              )}
+              {uploading && <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <i className="fas fa-spinner fa-spin" style={{ color: '#D4A843', fontSize: 14 }} />
+              </div>}
+            </div>
             <div>
               <h2 style={{ fontSize: 16, fontWeight: 600 }}>{form.firstName} {form.lastName}</h2>
               <p style={{ color: '#8B949E', fontSize: 12 }}>{form.role}</p>
             </div>
-            <button type="button" className="btn btn-sm btn-secondary" style={{ marginLeft: 'auto' }}>
-              <i className="fas fa-camera" /> Foto
+            <button type="button" className="btn btn-sm btn-secondary" style={{ marginLeft: 'auto' }} onClick={() => !uploading && fileRef.current?.click()}>
+              <i className="fas fa-camera" /> {uploading ? 'Subiendo...' : 'Foto'}
             </button>
+            <input ref={fileRef} type="file" accept="image/*" onChange={handlePhoto} style={{ display: 'none' }} />
           </div>
 
           <div className="grid-2" style={{ gap: 14 }}>
@@ -127,8 +184,8 @@ export default function SettingsPage() {
 
           <div className="form-actions" style={{ marginTop: 18 }}>
             <button type="button" className="btn btn-sm btn-secondary">Cancelar</button>
-            <button type="submit" className="btn btn-sm btn-primary" style={{ background: '#D4A843', color: '#000' }}>
-              <i className="fas fa-save" /> Guardar
+            <button type="submit" className="btn btn-sm btn-primary" style={{ background: '#D4A843', color: '#000' }} disabled={saving}>
+              <i className="fas fa-save" /> {saving ? 'Guardando...' : 'Guardar'}
             </button>
           </div>
         </form>

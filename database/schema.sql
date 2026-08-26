@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   location TEXT,
+  profile_image TEXT,
   role_id INTEGER NOT NULL,
   is_active INTEGER DEFAULT 1,
   created_at TEXT DEFAULT (datetime('now'))
@@ -64,6 +65,11 @@ CREATE TABLE IF NOT EXISTS products (
   status_id INTEGER NOT NULL,
   seller_id INTEGER NOT NULL,
   category_id INTEGER NOT NULL,
+  origin TEXT,
+  harvest_date TEXT,
+  expiration_date TEXT,
+  certifications TEXT,
+  unit TEXT DEFAULT 'Unidad',
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT
 );
@@ -96,7 +102,10 @@ CREATE TABLE IF NOT EXISTS sales (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   product_id INTEGER NOT NULL,
   buyer_id INTEGER NOT NULL,
+  seller_id INTEGER NOT NULL,
   quantity INTEGER NOT NULL DEFAULT 1,
+  price_at_purchase NUMERIC,
+  status TEXT DEFAULT 'Pendiente',
   created_at TEXT DEFAULT (datetime('now'))
 );
 

@@ -8,6 +8,7 @@ interface User {
   email: string
   role: string
   location?: string
+  profileImage?: string | null
 }
 
 interface AuthContextType {
@@ -16,6 +17,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>
   register: (data: Partial<User> & { password: string }) => Promise<void>
   logout: () => void
+  updateUser: (data: Partial<User>) => void
   loading: boolean
 }
 
@@ -28,11 +30,13 @@ function getCookie(name: string): string | null {
 }
 
 function setCookie(name: string, value: string, maxAge: number) {
-  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; SameSite=strict`
+  const secure = window.location.protocol === 'https:' ? '; Secure' : ''
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`
 }
 
 function deleteCookie(name: string) {
-  document.cookie = `${name}=; path=/; max-age=0; SameSite=strict`
+  const secure = window.location.protocol === 'https:' ? '; Secure' : ''
+  document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax${secure}`
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -50,6 +54,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false)
   }, [])
 
+  useEffect(() => {
+    if (!token) return
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/auth?refresh=1', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.token) {
+            setCookie('kopsale_token', data.token, 60 * 60)
+            setToken(data.token)
+          }
+        }
+      } catch {}
+    }, 50 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [token])
+
   const login = async (email: string, password: string) => {
     const res = await fetch('/api/auth', {
       method: 'POST',
@@ -61,8 +84,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(data.error || 'Credenciales inválidas')
     }
     const data = await res.json()
-    setCookie('kopsale_token', data.token, 7 * 24 * 60 * 60)
-    setCookie('kopsale_user', JSON.stringify(data.user), 7 * 24 * 60 * 60)
+    setCookie('kopsale_token', data.token, 60 * 60)
+    setCookie('kopsale_user', JSON.stringify(data.user), 60 * 60)
     setToken(data.token)
     setUser(data.user)
   }
@@ -86,8 +109,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }
 
+  const updateUser = (data: Partial<User>) => {
+    setUser(prev => {
+      if (!prev) return prev
+      const updated = { ...prev, ...data }
+      setCookie('kopsale_user', JSON.stringify(updated), 60 * 60)
+      return updated
+    })
+  }
+
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, loading }}>
+    <AuthContext.Provider value={{ user, token, login, register, logout, updateUser, loading }}>
       {children}
     </AuthContext.Provider>
   )

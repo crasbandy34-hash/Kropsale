@@ -11,111 +11,60 @@ export default function RatingsPage() {
   const [filter, setFilter] = useState(0)
   const [loaded, setLoaded] = useState(false)
 
-  const [rateSaleId, setRateSaleId] = useState<number>(0)
-  const [rateStars, setRateStars] = useState(5)
-  const [rateComment, setRateComment] = useState('')
-  const [pendingSales, setPendingSales] = useState<any[]>([])
-  const [saving, setSaving] = useState(false)
-
   useEffect(() => {
     if (!user?.id) return
-    ;(async () => {
-      try {
-        const [all, sales, prods, users] = await Promise.all([
-          api.get('/api/ratings').catch(() => []),
-          api.get('/api/sales').catch(() => []),
-          api.get('/api/products').catch(() => []),
-          api.get('/api/users').catch(() => []),
-        ])
-        setReviews(all.map((r: any) => {
-          const sale: any = sales.find((s: any) => s.id === r.sale_id)
-          const prod: any = prods.find((p: any) => p.id === sale?.product_id)
-          const seller: any = users.find((u: any) => u.id === r.reviewee_id)
-          const reviewer: any = users.find((u: any) => u.id === r.reviewer_id)
-          return {
-            id: r.id,
-            product: prod ? prod.title : '-',
-            seller: seller ? `${seller.firstName} ${seller.lastName}` : '-',
-            rating: Number(r.score),
-            comment: r.comment || '-',
-            date: fmtDate(r.created_at),
-            user: reviewer ? `${reviewer.firstName} ${reviewer.lastName.charAt(0)}.` : '-',
-          }
-        }))
-        if (user.role === 'Comprador') {
-          const mine = sales.filter((s: any) => s.buyer_id === user.id)
-          const missing = mine.filter((s: any) => !all.some((r: any) => r.sale_id === s.id))
-          setPendingSales(missing.map((s: any) => {
-            const prod: any = prods.find((p: any) => p.id === s.product_id)
-            const seller: any = users.find((u: any) => u.id === prod?.seller_id)
-            return {
-              id: s.id,
-              title: prod ? prod.title : '-',
-              sellerId: prod?.seller_id,
-              seller: seller ? `${seller.firstName} ${seller.lastName}` : '-',
-            }
-          }))
-          if (missing.length > 0) {
-            const first = missing[0]
-            const prod: any = prods.find((p: any) => p.id === first.product_id)
-            setRateSaleId(first.id)
-          }
-        }
-      } catch { setReviews([]) }
-      setLoaded(true)
-    })()
+    loadReviews()
   }, [user?.id])
 
-  const filtered = filter === 0 ? reviews : reviews.filter(r => r.rating === filter)
+  async function loadReviews() {
+    try {
+      const [all, sales, prods, users] = await Promise.all([
+        api.get('/api/ratings').catch(() => []),
+        api.get('/api/sales').catch(() => []),
+        api.get('/api/products').catch(() => []),
+        api.get('/api/users').catch(() => []),
+      ])
+      const received = all.filter((r: any) => r.reviewee_id === user?.id)
+      setReviews(received.map((r: any) => {
+        const sale: any = sales.find((s: any) => s.id === r.sale_id)
+        const prod: any = prods.find((p: any) => p.id === sale?.product_id)
+        const reviewer: any = users.find((u: any) => u.id === r.reviewer_id)
+        return {
+          id: r.id,
+          product: prod ? prod.title : '-',
+          reviewerName: reviewer ? `${reviewer.firstName} ${reviewer.lastName}` : 'Comprador',
+          rating: Number(r.score),
+          comment: r.comment || '',
+          date: fmtDate(r.created_at),
+        }
+      }))
+    } catch { setReviews([]) }
+    setLoaded(true)
+  }
 
-  function StarRating({ value, onPick }: { value: number, onPick?: (n: number) => void }) {
+  const filtered = filter === 0 ? reviews : reviews.filter(r => r.rating === filter)
+  const avg = reviews.length > 0 ? reviews.reduce((a, r) => a + r.rating, 0) / reviews.length : 0
+
+  async function deleteReview(id: number) {
+    if (!confirm('¿Eliminar esta reseña?')) return
+    try {
+      await api.del(`/api/ratings?id=${id}`)
+      setReviews(prev => prev.filter(r => r.id !== id))
+    } catch (e: any) {
+      alert(e.message || 'Error al eliminar')
+    }
+  }
+
+  function StarRating({ value }: { value: number }) {
     return (
       <div style={{ display: 'inline-flex', gap: 1 }}>
         {[1, 2, 3, 4, 5].map(s => (
           <i key={s} className={`fas fa-star`} style={{
             fontSize: 10, color: s <= value ? '#D4A843' : 'rgba(255,255,255,0.15)',
-            cursor: onPick ? 'pointer' : 'default'
-          }} onClick={onPick ? () => onPick(s) : undefined} />
+          }} />
         ))}
       </div>
     )
-  }
-
-  async function submitRating(e: React.FormEvent) {
-    e.preventDefault()
-    if (!rateSaleId || !user?.id) { alert('Selecciona una compra'); return }
-    setSaving(true)
-    try {
-      await api.post('/api/ratings', {
-        sale_id: rateSaleId, reviewer_id: user.id, reviewee_id: rateSaleId ? pendingSales.find(p => p.id === rateSaleId)?.sellerId ?? null : null,
-        score: rateStars, comment: rateComment,
-      })
-      alert('✓ Valoración enviada. ¡Gracias!')
-      setRateComment('')
-      setPendingSales(pendingSales.filter(p => p.id !== rateSaleId))
-      if (pendingSales.length > 1) setRateSaleId(pendingSales.filter(p => p.id !== rateSaleId)[0].id)
-      else setRateSaleId(0)
-      const all = await api.get('/api/ratings')
-      const sales = await api.get('/api/sales')
-      const prods = await api.get('/api/products')
-      const users = await api.get('/api/users')
-      setReviews(all.map((r: any) => {
-        const sale: any = sales.find((s: any) => s.id === r.sale_id)
-        const prod: any = prods.find((p: any) => p.id === sale?.product_id)
-        const seller: any = users.find((u: any) => u.id === r.reviewee_id)
-        const reviewer: any = users.find((u: any) => u.id === r.reviewer_id)
-        return {
-          id: r.id, product: prod ? prod.title : '-',
-          seller: seller ? `${seller.firstName} ${seller.lastName}` : '-',
-          rating: Number(r.score), comment: r.comment || '-',
-          date: fmtDate(r.created_at),
-          user: reviewer ? `${reviewer.firstName} ${reviewer.lastName.charAt(0)}.` : '-',
-        }
-      }))
-    } catch (e: any) {
-      alert(e.message || 'Error al enviar valoración')
-    }
-    setSaving(false)
   }
 
   return (
@@ -124,42 +73,20 @@ export default function RatingsPage() {
         background: 'var(--bg-card2)',
         borderRadius: 14, padding: '16px 18px', marginBottom: 14
       }}>
-        <h1 style={{ fontSize: 19, fontWeight: 700, marginBottom: 4 }}>Valoraciones</h1>
-        <p style={{ color: '#8B949E', fontSize: 12 }}>Reseñas de productos.</p>
-      </div>
-
-      {user?.role === 'Comprador' && (
-        <div style={{ background: '#1e2a3a', borderRadius: 10, border: '1px solid var(--border-color)', padding: 14, marginBottom: 14 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}><i className="fas fa-star" style={{ color: '#D4A843', marginRight: 6 }} />Calificar una compra</h3>
-          {pendingSales.length === 0 ? (
-            <p style={{ fontSize: 12, color: '#6a7580' }}>No tienes compras pendientes de valorar.</p>
-          ) : (
-            <form onSubmit={submitRating}>
-              <div className="form-group">
-                <label>Compra</label>
-                <select value={rateSaleId} onChange={e => setRateSaleId(Number(e.target.value))} style={{
-                  width: '100%', padding: '7px 10px', background: '#1e2a3a', border: '1px solid var(--border-color)', borderRadius: 6, color: '#fff', fontSize: 12
-                }}>
-                  {pendingSales.map(p => <option key={p.id} value={p.id}>{p.title} — {p.seller}</option>)}
-                </select>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                <label style={{ fontSize: 12, color: '#8B949E' }}>Puntuación</label>
-                <StarRating value={rateStars} onPick={setRateStars} />
-              </div>
-              <div className="form-group">
-                <label>Comentario (opcional)</label>
-                <textarea value={rateComment} onChange={e => setRateComment(e.target.value)} rows={2} style={{
-                  width: '100%', padding: '7px 10px', background: '#1e2a3a', border: '1px solid var(--border-color)', borderRadius: 6, color: '#fff', fontSize: 12, resize: 'vertical'
-                }} placeholder="¿Cómo fue tu experiencia?" />
-              </div>
-              <button type="submit" disabled={saving} className="btn btn-sm btn-primary" style={{ background: '#D4A843', color: '#000', padding: '7px 16px' }}>
-                <i className="fas fa-paper-plane" /> {saving ? 'Enviando...' : 'Enviar valoración'}
-              </button>
-            </form>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            <h1 style={{ fontSize: 19, fontWeight: 700, marginBottom: 4 }}>Reseñas Recibidas</h1>
+            <p style={{ color: '#8B949E', fontSize: 12 }}>Reseñas que los compradores han dejado sobre ti.</p>
+          </div>
+          {reviews.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <i className="fas fa-star" style={{ color: '#D4A843', fontSize: 16 }} />
+              <span style={{ fontSize: 20, fontWeight: 700, color: '#D4A843', fontFamily: 'Inter' }}>{avg.toFixed(1)}</span>
+              <span style={{ fontSize: 11, color: '#8B949E' }}>({reviews.length})</span>
+            </div>
           )}
         </div>
-      )}
+      </div>
 
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
         <button onClick={() => setFilter(0)} style={{
@@ -180,7 +107,7 @@ export default function RatingsPage() {
       {loaded && filtered.length === 0 && (
         <div style={{ padding: '30px 20px', textAlign: 'center', color: '#6a7580', fontSize: 13, background: '#1e2a3a', borderRadius: 10, border: '1px solid var(--border-color)' }}>
           <i className="fas fa-star-half-alt" style={{ fontSize: 24, display: 'block', marginBottom: 8, color: 'rgba(212,168,67,0.3)' }} />
-          Aún no hay valoraciones.
+          Aún no has recibido reseñas.
         </div>
       )}
 
@@ -190,23 +117,29 @@ export default function RatingsPage() {
             background: '#1e2a3a', borderRadius: 10, border: '1px solid var(--border-color)', padding: 14
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6, flexWrap: 'wrap', gap: 4 }}>
-              <div>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{r.product}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
                   <StarRating value={r.rating} />
-                  <span style={{ fontSize: 10, color: '#8B949E' }}>por {r.user}</span>
+                  <span style={{ fontSize: 10, color: '#8B949E' }}>{r.rating}/5</span>
+                  <span style={{ fontSize: 10, color: '#6a7580' }}>por {r.reviewerName}</span>
                 </div>
               </div>
-              <span style={{ fontSize: 10, color: '#6a7580', whiteSpace: 'nowrap' }}>{r.date}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                <span style={{ fontSize: 10, color: '#6a7580', whiteSpace: 'nowrap' }}>{r.date}</span>
+                <button onClick={() => deleteReview(r.id)} style={{
+                  background: 'none', border: 'none', color: '#6a7580', cursor: 'pointer', padding: 4, fontSize: 10, borderRadius: 4
+                }} title="Eliminar reseña">
+                  <i className="fas fa-trash" />
+                </button>
+              </div>
             </div>
-            <p style={{ fontSize: 12, color: '#d4d4d8', marginBottom: 6 }}>
-              <i className="fas fa-quote-left" style={{ fontSize: 9, color: '#6a7580', marginRight: 4 }} />
-              {r.comment}
-            </p>
-            <div style={{ fontSize: 10, color: '#6a7580' }}>
-              <i className="fas fa-store" style={{ fontSize: 9, marginRight: 4 }} />
-              Vendedor: {r.seller}
-            </div>
+            {r.comment && (
+              <p style={{ fontSize: 12, color: '#d4d4d8', marginBottom: 6 }}>
+                <i className="fas fa-quote-left" style={{ fontSize: 9, color: '#6a7580', marginRight: 4 }} />
+                {r.comment}
+              </p>
+            )}
           </div>
         ))}
       </div>

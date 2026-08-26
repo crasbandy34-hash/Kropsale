@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   location TEXT,
+  profile_image TEXT,
   role_id INTEGER NOT NULL,
   is_active INTEGER DEFAULT 1,
   created_at TEXT DEFAULT (datetime('now'))
@@ -58,6 +59,11 @@ CREATE TABLE IF NOT EXISTS products (
   status_id INTEGER NOT NULL,
   seller_id INTEGER NOT NULL,
   category_id INTEGER NOT NULL,
+  origin TEXT,
+  harvest_date TEXT,
+  expiration_date TEXT,
+  certifications TEXT,
+  unit TEXT DEFAULT 'Unidad',
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT
 );
@@ -86,7 +92,10 @@ CREATE TABLE IF NOT EXISTS sales (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   product_id INTEGER NOT NULL,
   buyer_id INTEGER NOT NULL,
+  seller_id INTEGER NOT NULL,
   quantity INTEGER NOT NULL DEFAULT 1,
+  price_at_purchase NUMERIC,
+  status TEXT DEFAULT 'Pendiente',
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS favorites (
@@ -194,6 +203,41 @@ async function ensureTursoSchema(client: any) {
   for (const stmt of splitStatements(SCHEMA)) {
     await client.execute(stmt)
   }
+
+  // Migraciones ALTER TABLE para BDs existentes
+  async function hasColumn(table: string, column: string): Promise<boolean> {
+    const res = await client.execute({ sql: `PRAGMA table_info(${table})`, args: [] })
+    return res.rows.some((r: any) => (r.name || rowToObj(r).name) === column)
+  }
+
+  if (!(await hasColumn('users', 'role_id'))) {
+    await client.execute('ALTER TABLE users ADD COLUMN role_id INTEGER')
+    await client.execute(`UPDATE users SET role_id = COALESCE((SELECT id FROM roles r WHERE r.name = users.role), 3)`)
+  }
+  if (!(await hasColumn('users', 'profile_image'))) {
+    await client.execute('ALTER TABLE users ADD COLUMN profile_image TEXT')
+  }
+  for (const col of ['origin', 'harvest_date', 'expiration_date', 'certifications', 'unit']) {
+    if (!(await hasColumn('products', col))) {
+      await client.execute(`ALTER TABLE products ADD COLUMN ${col} TEXT`)
+    }
+  }
+  if (!(await hasColumn('products', 'stock'))) {
+    await client.execute('ALTER TABLE products ADD COLUMN stock INTEGER NOT NULL DEFAULT 0')
+  }
+  if (!(await hasColumn('sales', 'quantity'))) {
+    await client.execute('ALTER TABLE sales ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1')
+  }
+  if (!(await hasColumn('sales', 'seller_id'))) {
+    await client.execute('ALTER TABLE sales ADD COLUMN seller_id INTEGER NOT NULL DEFAULT 0')
+  }
+  if (!(await hasColumn('sales', 'price_at_purchase'))) {
+    await client.execute('ALTER TABLE sales ADD COLUMN price_at_purchase NUMERIC')
+  }
+  if (!(await hasColumn('sales', 'status'))) {
+    await client.execute("ALTER TABLE sales ADD COLUMN status TEXT DEFAULT 'Pendiente'")
+  }
+
   const count = await client.execute('SELECT COUNT(*) AS c FROM roles')
   const row = rowToObj(count.rows[0])
   if (Number(row.c) === 0) {
@@ -291,6 +335,10 @@ function ensureSchema(db: any) {
       // rol ya eliminado o no soportado, no es crítico
     }
   }
+  const hasProfileImage = cols[0].values.some((v: any[]) => v[1] === 'profile_image')
+  if (!hasProfileImage) {
+    db.run('ALTER TABLE users ADD COLUMN profile_image TEXT')
+  }
 
   const roleCount = db.exec('SELECT COUNT(*) FROM roles')
   if (!roleCount[0].values[0][0]) {
@@ -370,6 +418,33 @@ function tryInitSchema(db: any) {
     const scols = db.exec('PRAGMA table_info(sales)')
     if (scols && scols[0] && !scols[0].values.some((v: any[]) => v[1] === 'quantity')) {
       db.run('ALTER TABLE sales ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1')
+      changed = true
+    }
+    const pcols2 = db.exec('PRAGMA table_info(products)')
+    const pcolNames = pcols2 && pcols2[0] ? pcols2[0].values.map((v: any[]) => v[1]) : []
+    for (const col of ['origin', 'harvest_date', 'expiration_date', 'certifications', 'unit']) {
+      if (!pcolNames.includes(col)) {
+        db.run(`ALTER TABLE products ADD COLUMN ${col} TEXT`)
+        changed = true
+      }
+    }
+    const ucolNames = cols && cols[0] ? cols[0].values.map((v: any[]) => v[1]) : []
+    if (!ucolNames.includes('profile_image')) {
+      db.run('ALTER TABLE users ADD COLUMN profile_image TEXT')
+      changed = true
+    }
+    const scols2 = db.exec('PRAGMA table_info(sales)')
+    const scolNames = scols2 && scols2[0] ? scols2[0].values.map((v: any[]) => v[1]) : []
+    if (!scolNames.includes('seller_id')) {
+      db.run('ALTER TABLE sales ADD COLUMN seller_id INTEGER NOT NULL DEFAULT 0')
+      changed = true
+    }
+    if (!scolNames.includes('price_at_purchase')) {
+      db.run('ALTER TABLE sales ADD COLUMN price_at_purchase NUMERIC')
+      changed = true
+    }
+    if (!scolNames.includes('status')) {
+      db.run("ALTER TABLE sales ADD COLUMN status TEXT DEFAULT 'Pendiente'")
       changed = true
     }
     if (changed) saveDb(db)

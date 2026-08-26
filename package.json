@@ -2,7 +2,7 @@
   "name": "kopsale",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node server.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
@@ -20,6 +20,8 @@
     "next": "^15.5.22",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
     "sql.js": "^1.14.1"
   },
   "devDependencies": {

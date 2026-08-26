@@ -11,9 +11,11 @@ interface RealStats {
   salesAll: any[]
   mySales: any[]
   myRatings: any[]
+  receivedRatings: any[]
   roleCounts: { [role: string]: number }
   favCount: number
   monthlyAmounts: number[]
+  usersAll: any[]
 }
 
 function useRealStats(): RealStats | null {
@@ -59,9 +61,11 @@ function useRealStats(): RealStats | null {
             _rated: ratings.some((r: any) => r.sale_id === s.id),
           })),
           myRatings: ratings.filter((r: any) => r.reviewer_id === user.id),
+          receivedRatings: ratings.filter((r: any) => r.reviewee_id === user.id),
           favCount: favs.length,
           roleCounts,
           monthlyAmounts: months.map(v => Math.round(v)),
+          usersAll: users,
         })
       } catch { setStats(null) }
     })()
@@ -178,12 +182,13 @@ function AdminDashboard({ s }: { s: RealStats }) {
 function SellerDashboard({ s }: { s: RealStats }) {
   const myTotal = s.mySales.reduce((acc, x) => acc + (x._price || 0), 0)
   const salesAmount = Math.round(myTotal)
-  const reviews = s.myRatings.length
+  const reviews = s.receivedRatings.length
+  const avgRating = reviews > 0 ? s.receivedRatings.reduce((acc: number, r: any) => acc + Number(r.score), 0) / reviews : 0
   const stats = [
     { label: 'Mis Productos', value: String(s.myProducts.length), icon: 'fa-boxes-stacked', change: 'publicados', color: '#8B7D6B' },
     { label: 'Ventas', value: `$${salesAmount.toLocaleString()}`, icon: 'fa-receipt', change: 'registradas', color: '#D4A843' },
     { label: 'Pedidos', value: String(s.mySales.length), icon: 'fa-clock', change: 'en total', color: '#4a5a6a' },
-    { label: 'Calificación', value: reviews ? String(reviews) : '0', icon: 'fa-star', change: reviews ? `${reviews} reseña(s)` : 'sin reseñas', color: '#D4A843' },
+    { label: 'Calificación', value: reviews ? avgRating.toFixed(1) : '0', icon: 'fa-star', change: reviews ? `${reviews} reseña(s)` : 'sin reseñas', color: '#D4A843' },
   ]
   const recentProducts = s.myProducts.slice(0, 3).map((p: any) => ({
     name: p.title,
@@ -237,6 +242,36 @@ function SellerDashboard({ s }: { s: RealStats }) {
           </table>
         </div>
       </div>
+      {s.receivedRatings.length > 0 && (
+        <div style={{ backgroundColor: '#1e2a3a', borderRadius: 10, padding: '16px 18px', border: '1px solid var(--border-color)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600 }}>Últimas Reseñas</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <i className="fas fa-star" style={{ color: '#D4A843', fontSize: 12 }} />
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#D4A843', fontFamily: 'Inter' }}>{avgRating.toFixed(1)}</span>
+              <span style={{ fontSize: 11, color: '#8B949E' }}>({reviews})</span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {s.receivedRatings.slice(0, 5).map((r: any) => {
+              const reviewer = s.usersAll.find((u: any) => u.id === r.reviewer_id)
+              return (
+                <div key={r.id} style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600 }}>{reviewer ? `${reviewer.firstName} ${reviewer.lastName}` : 'Comprador'}</span>
+                    <div style={{ display: 'flex', gap: 2 }}>
+                      {[1, 2, 3, 4, 5].map(i => (
+                        <i key={i} className="fas fa-star" style={{ color: i <= Number(r.score) ? '#D4A843' : 'rgba(255,255,255,0.15)', fontSize: 9 }} />
+                      ))}
+                    </div>
+                  </div>
+                  {r.comment && <p style={{ fontSize: 11, color: '#8B949E', lineHeight: 1.4 }}>{r.comment}</p>}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

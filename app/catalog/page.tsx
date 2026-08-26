@@ -90,6 +90,7 @@ export default function CatalogPage() {
             reviews: Number(p.reviews || 0),
             stock: Number(p.stock || 0),
             organic: false,
+            seller_id: p.seller_id,
           }
         }))
       } catch (e) {
@@ -113,6 +114,13 @@ export default function CatalogPage() {
     if (category !== 'Todas' && p.category !== category) return false
     if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false
     return true
+  }).sort((a, b) => {
+    if (user?.role === 'Vendedor' && user?.id) {
+      const aMine = a.seller_id === user.id ? 0 : 1
+      const bMine = b.seller_id === user.id ? 0 : 1
+      return aMine - bMine
+    }
+    return 0
   })
 
   return (
@@ -199,19 +207,6 @@ export default function CatalogPage() {
           </div>
         )}
 
-        {user?.role === 'Comprador' && (
-          <div style={{ marginTop: 18, background: '#1e2a3a', borderRadius: 10, border: '1px solid var(--border-color)', padding: 16 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>
-              <i className="fas fa-star" style={{ color: '#D4A843', marginRight: 6 }} />Reseñas Recientes
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ fontSize: 11, color: '#8B949E' }}>Califica tus compras en Valoraciones</span>
-                <Link href="/ratings" style={{ fontSize: 10, color: '#D4A843', textDecoration: 'none' }}>Ir →</Link>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </Layout>
   )

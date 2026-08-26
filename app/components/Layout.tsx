@@ -2,6 +2,7 @@
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
+import { useApi, localImg } from '@/lib/apiClient'
 import { useState, useEffect } from 'react'
 
 const navItems = [
@@ -13,9 +14,10 @@ const navItems = [
   { path: '/catalog', label: 'MarketKrop', icon: 'fa-boxes-stacked', roles: ['all'] },
   { path: '/inventory', label: 'Inventario', icon: 'fa-warehouse', roles: ['Vendedor'] },
   { path: '/sales', label: 'Ventas', icon: 'fa-receipt', roles: ['Vendedor'] },
+  { path: '/sales', label: 'Compras', icon: 'fa-receipt', roles: ['Comprador'] },
+  { path: '/ratings', label: 'Reseñas', icon: 'fa-star', roles: ['Vendedor'] },
   { path: '/conversations', label: 'Mensajes', icon: 'fa-comments', roles: ['all'] },
   { path: '/notifications', label: 'Notificaciones', icon: 'fa-bell', roles: ['all'] },
-  { path: '/ratings', label: 'Reseñas', icon: 'fa-star', roles: ['Comprador'] },
   { path: '/support', label: 'Soporte', icon: 'fa-headset', roles: ['all'] },
 ]
 
@@ -23,15 +25,37 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const { user, logout } = useAuth() || { user: null, logout: () => {} }
+  const api = useApi()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => { setSidebarOpen(false) }, [pathname])
 
   useEffect(() => {
+    if (!user?.id) return
+    ;(async () => {
+      try {
+        const [conversations, messages] = await Promise.all([
+          api.get('/api/conversations').catch(() => []),
+          api.get('/api/messages').catch(() => []),
+        ])
+        const convosForMe = conversations.filter((c: any) => c.buyer_id === user.id || c.seller_id === user.id || user.role === 'Administrador')
+        const count = messages.filter((m: any) =>
+          convosForMe.some((c: any) => c.id === m.conversation_id) && m.sender_id !== user.id && !Number(m.is_read)
+        ).length
+        setUnreadCount(count)
+      } catch {
+        setUnreadCount(0)
+      }
+    })()
+  }, [user?.id, user?.role, pathname])
+
+  useEffect(() => {
     if (!user) return
     if (pathname === '/login' || pathname === '/register' || pathname === '/') return
-    const item = navItems.find(n => pathname.startsWith(n.path))
-    if (item && !item.roles.includes('all') && !item.roles.includes(user.role)) {
+    const matchingItems = navItems.filter(n => pathname.startsWith(n.path))
+    const allowed = matchingItems.some(n => n.roles.includes('all') || n.roles.includes(user.role))
+    if (matchingItems.length > 0 && !allowed) {
       router.push('/dashboard')
     }
   }, [user, pathname, router])
@@ -43,8 +67,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const mobileNavItems = (() => {
     if (!user) return ['/dashboard', '/catalog', '/conversations', '/notifications', '/support', '/settings']
     if (user.role === 'Administrador') return ['/dashboard', '/catalog', '/users', '/roles', '/reports', '/classifications', '/conversations', '/notifications', '/support', '/settings']
-    if (user.role === 'Vendedor') return ['/dashboard', '/catalog', '/inventory', '/sales', '/conversations', '/notifications', '/support', '/settings']
-    if (user.role === 'Comprador') return ['/dashboard', '/catalog', '/ratings', '/conversations', '/notifications', '/support', '/settings']
+    if (user.role === 'Vendedor') return ['/dashboard', '/catalog', '/inventory', '/sales', '/ratings', '/conversations', '/notifications', '/support', '/settings']
+    if (user.role === 'Comprador') return ['/dashboard', '/catalog', '/sales', '/conversations', '/notifications', '/support', '/settings']
     return ['/dashboard', '/catalog', '/conversations', '/notifications', '/support', '/settings']
   })()
 
@@ -131,15 +155,20 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </button>
             <button onClick={() => router.push('/notifications')} className="icon-btn" style={{ width: 34, height: 34, fontSize: 12, position: 'relative' }}>
               <i className="fas fa-bell" />
-              <span className="badge">3</span>
+              {unreadCount > 0 && <span className="badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}
             </button>
             {user && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '2px 8px', borderRadius: 8 }}>
                 <div style={{
-                  width: 34, height: 34, background: 'var(--accent-amber)',
-                  borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 12, color: '#000'
+                  width: 34, height: 34, background: user.profileImage ? 'transparent' : 'var(--accent-amber)',
+                  borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 12, color: '#000',
+                  overflow: 'hidden', border: '1px solid var(--border-color)'
                 }}>
-                  {user.firstName?.[0]}{user.lastName?.[0]}
+                  {user.profileImage ? (
+                    <img src={localImg(user.profileImage)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <>{user.firstName?.[0]}{user.lastName?.[0]}</>
+                  )}
                 </div>
                 <span style={{
                   padding: '2px 8px', borderRadius: 6, fontSize: 9, fontWeight: 600,

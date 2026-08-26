@@ -1,13 +1,64 @@
 'use client'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
 import Link from 'next/link'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { useApi, fmtTime, initials } from '@/lib/apiClient'
+import { useWebRTC } from '@/lib/useWebRTC'
+
+function ProductCard({ data, onConfirm }: { data: any; onConfirm?: () => void }) {
+  return (
+    <div style={{
+      background: 'rgba(212,168,67,0.08)', border: '1px solid rgba(212,168,67,0.2)',
+      borderRadius: 10, padding: 10, maxWidth: 260
+    }}>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ width: 60, height: 60, borderRadius: 8, overflow: 'hidden', flexShrink: 0, background: '#1e2a3a' }}>
+          <img src={data.product_image || '/images/placeholder-1.svg'} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2, color: '#fff' }}>{data.product_name}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#D4A843', fontFamily: 'Inter' }}>${Number(data.product_price).toFixed(2)}</div>
+          <div style={{ fontSize: 10, color: '#8B949E' }}>por {data.product_unit || 'Unidad'}</div>
+        </div>
+      </div>
+      {onConfirm && (
+        <button onClick={onConfirm} style={{
+          marginTop: 8, width: '100%', padding: '6px', borderRadius: 6,
+          background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.2)',
+          color: '#4ade80', fontSize: 11, cursor: 'pointer', fontWeight: 600
+        }}>
+          <i className="fas fa-check-circle" style={{ marginRight: 4 }} />Confirmar venta
+        </button>
+      )}
+    </div>
+  )
+}
+
+function SaleConfirmCard({ data }: { data: any }) {
+  return (
+    <div style={{
+      background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)',
+      borderRadius: 10, padding: 12, maxWidth: 280
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: '#4ade80', marginBottom: 6 }}>
+        <i className="fas fa-check-circle" style={{ marginRight: 4 }} />Venta Confirmada
+      </div>
+      <div style={{ fontSize: 12, color: '#8B949E' }}>{data.product_name}</div>
+      <div style={{ fontSize: 12, color: '#fff', marginTop: 2 }}>
+        {data.quantity} x <span style={{ color: '#D4A843', fontFamily: 'Inter' }}>${Number(data.price).toFixed(2)}</span>
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: '#D4A843', fontFamily: 'Inter', marginTop: 4 }}>
+        Total: ${(data.quantity * data.price).toFixed(2)}
+      </div>
+    </div>
+  )
+}
 
 export default function ConversationDetailPage() {
   const params = useParams()
+  const router = useRouter()
   const idNum = Number(params.id)
   const { user } = useAuth()
   const api = useApi()
@@ -22,6 +73,70 @@ export default function ConversationDetailPage() {
   const [callResult, setCallResult] = useState('')
   const [muted, setMuted] = useState(false)
   const [elapsed, setElapsed] = useState(0)
+  const [showSaleModal, setShowSaleModal] = useState(false)
+  const [salePrice, setSalePrice] = useState('')
+  const [saleQty, setSaleQty] = useState(1)
+  const localVideoRef = useRef<HTMLVideoElement>(null)
+  const remoteVideoRef = useRef<HTMLVideoElement>(null)
+
+  const webrtcCallbacks = useRef<CallCallbacks>({})
+  webrtcCallbacks.current = {
+    onIncomingCall: (data) => {
+      if (activeCall) return
+      setCallResult('')
+      setActiveCall({
+        id: Date.now(),
+        type: data.type,
+        status: 'ringing',
+        isCaller: false,
+        callerId: data.callerId,
+      })
+    },
+    onCallAnswered: async (data) => {
+      setActiveCall((prev: any) => {
+        if (!prev || !prev.isCaller) return prev
+        api.put(`/api/calls?id=${prev.id}&status=ongoing`, { status: 'ongoing' }).catch(() => {})
+        setElapsed(0)
+        return { ...prev, status: 'ongoing' }
+      })
+    },
+    onCallDeclined: () => {
+      setCallResult('Llamada rechazada')
+      setActiveCall(null)
+      webrtc.cleanup()
+      setMuted(false)
+      setTimeout(() => setCallResult(''), 2000)
+    },
+    onCallEnded: () => {
+      setCallResult('Llamada finalizada')
+      setActiveCall(null)
+      webrtc.cleanup()
+      setMuted(false)
+      setTimeout(() => setCallResult(''), 2000)
+    },
+  }
+
+  const webrtc = useWebRTC({
+    onIncomingCall: (data) => webrtcCallbacks.current.onIncomingCall?.(data),
+    onCallAnswered: (data) => webrtcCallbacks.current.onCallAnswered?.(data),
+    onCallDeclined: (data) => webrtcCallbacks.current.onCallDeclined?.(data),
+    onCallEnded: (data) => webrtcCallbacks.current.onCallEnded?.(data),
+  })
+
+  useEffect(() => {
+    if (!webrtc.localStream || !localVideoRef.current) return
+    localVideoRef.current.srcObject = webrtc.localStream
+  }, [webrtc.localStream])
+
+  useEffect(() => {
+    if (!webrtc.remoteStream || !remoteVideoRef.current) return
+    remoteVideoRef.current.srcObject = webrtc.remoteStream
+  }, [webrtc.remoteStream])
+
+  useEffect(() => {
+    if (!user?.id) return
+    webrtc.joinRoom(idNum)
+  }, [idNum, user?.id])
 
   useEffect(() => {
     if (!user?.id) return
@@ -46,7 +161,19 @@ export default function ConversationDetailPage() {
             name: fullName,
             otherId: other ? other.id : null,
             avatar: initials(fullName),
-            lastMsg: last ? last.content : (prod ? `Interés en: ${prod.title}` : 'Sin mensajes todavía'),
+            lastMsg: (() => {
+              const raw = last ? last.content : (prod ? `Interés en: ${prod.title}` : 'Sin mensajes todavía')
+              try {
+                let txt = raw
+                if (typeof txt === 'string') {
+                  let p = JSON.parse(txt)
+                  while (typeof p === 'string') { p = JSON.parse(p) }
+                  if (p?.type === 'product_interest') return `Producto: ${p.product_name}`
+                  if (p?.type === 'sale_confirmed') return `Venta confirmada: ${p.product_name}`
+                }
+              } catch {}
+              return raw || 'Sin mensajes todavía'
+            })(),
             time: last ? fmtTime(last.sent_at) : 'Nuevo',
             unread,
             online: false,
@@ -102,106 +229,153 @@ export default function ConversationDetailPage() {
     }
   }
 
+  async function confirmSale() {
+    if (!user?.id || user.role !== 'Vendedor') return
+    const price = parseFloat(salePrice)
+    if (!price || price <= 0) { alert('Ingresa un precio válido'); return }
+    if (saleQty < 1) { alert('La cantidad debe ser al menos 1'); return }
+
+    let productInfo = null
+    for (const m of messages) {
+      const parsed = parseMsgJson(m.text)
+      if (parsed?.type === 'product_interest') { productInfo = parsed; break }
+    }
+    if (!productInfo) { alert('No se encontró el producto de interés en esta conversación'); return }
+
+    try {
+      await api.post('/api/sales', {
+        product_id: productInfo.product_id,
+        buyer_id: convo.otherId,
+        seller_id: user.id,
+        quantity: saleQty,
+        price_at_purchase: price,
+        status: 'Completado',
+      })
+      const now = new Date().toISOString().slice(0, 19).replace('T', ' ')
+      const confirmContent = JSON.stringify({
+        type: 'sale_confirmed',
+        product_name: productInfo.product_name,
+        quantity: saleQty,
+        price,
+      })
+      const res = await api.post('/api/messages', { conversation_id: idNum, sender_id: user.id, content: confirmContent })
+      setMessages(prev => [...prev, { id: res.id || Date.now(), from: 'me', text: confirmContent, time: fmtTime(now) }])
+      setShowSaleModal(false)
+      setSalePrice('')
+      setSaleQty(1)
+    } catch (e: any) {
+      alert(e.message || 'Error al confirmar venta')
+    }
+  }
+
   async function startCall(type: 'voice' | 'video') {
     if (!user?.id || !convo?.otherId) { alert('No se puede llamar a este contacto'); return }
+    if (activeCall) { alert('Ya hay una llamada en curso'); return }
     try {
       const res = await api.post('/api/calls', {
         conversation_id: idNum, caller_id: user.id, callee_id: convo.otherId, type,
       })
       setCallResult('')
       setActiveCall({ id: res.id, type, status: 'ringing', isCaller: true })
+      await webrtc.startCall(idNum, user.id, convo.otherId, type)
     } catch (e: any) {
-      alert(e.message || 'Error al iniciar la llamada')
+      alert(e.message || 'Error al iniciar llamada')
+      webrtc.cleanup()
+      setActiveCall(null)
     }
   }
 
   useEffect(() => {
+    if (!activeCall || activeCall.status !== 'ongoing') return
     const t = setInterval(() => setElapsed(e => e + 1), 1000)
     return () => clearInterval(t)
   }, [activeCall?.status === 'ongoing'])
 
-  useEffect(() => {
-    if (!user?.id) return
-    let ignore = false
-    const t = setInterval(async () => {
-      try {
-        const msgs = await api.get('/api/messages').catch(() => [])
-        if (ignore) return
-        const convMs = msgs
-          .filter((m: any) => m.conversation_id === idNum)
-          .sort((a: any, b: any) => (a.sent_at || '').localeCompare(b.sent_at || ''))
-        setMessages(convMs.map((m: any) => ({
-          id: m.id,
-          from: m.sender_id === user.id ? 'me' : 'them',
-          text: m.content,
-          time: fmtTime(m.sent_at),
-        })))
-        for (const m of convMs) {
-          if (m.sender_id !== user.id && !Number(m.is_read)) {
-            await api.put(`/api/messages?id=${m.id}`, { is_read: 1 }).catch(() => {})
-          }
-        }
-      } catch { }
-    }, 3000)
-    return () => { ignore = true; clearInterval(t) }
-  }, [user?.id, idNum])
-
-  useEffect(() => {
-    if (!activeCall) return
-    const t = setInterval(async () => {
-      try {
-        const calls = await api.get(`/api/calls?conversation_id=${idNum}`).catch(() => [])
-        const mine = calls.find((c: any) => c.id === activeCall.id)
-        if (!mine) return
-        if (mine.status === 'ongoing' && activeCall.status !== 'ongoing') {
-          setElapsed(0)
-          setActiveCall({ ...activeCall, status: 'ongoing' })
-        } else if (mine.status === 'ended' || mine.status === 'declined') {
-          setCallResult(mine.status === 'declined' ? 'Llamada no contestada' : 'Llamada finalizada')
-          setActiveCall(null)
-          setTimeout(() => setCallResult(''), 2000)
-        }
-      } catch { }
-    }, 2000)
-    return () => clearInterval(t)
-  }, [activeCall, idNum])
-
-  useEffect(() => {
-    if (activeCall || !user?.id) return
-    const t = setInterval(async () => {
-      try {
-        const calls = await api.get(`/api/calls?conversation_id=${idNum}`).catch(() => [])
-        const inc = calls.find((c: any) => c.status === 'ringing' && c.callee_id === user.id)
-        if (inc) {
-          setCallResult('')
-          setActiveCall({ id: inc.id, type: inc.type === 'video' ? 'video' : 'voice', status: 'ringing', isCaller: false })
-        }
-      } catch { }
-    }, 2000)
-    return () => clearInterval(t)
-  }, [activeCall, idNum, user?.id])
-
   async function answerCall() {
-    if (!activeCall || activeCall.isCaller) return
-    await api.put(`/api/calls?id=${activeCall.id}&status=ongoing`, { status: 'ongoing' }).catch((e: any) => alert(e.message))
-    setElapsed(0)
-    setActiveCall({ ...activeCall, status: 'ongoing' })
+    if (!activeCall || activeCall.isCaller || !user?.id) return
+    try {
+      await api.put(`/api/calls?id=${activeCall.id}&status=ongoing`, { status: 'ongoing' }).catch(() => {})
+      setElapsed(0)
+      setActiveCall({ ...activeCall, status: 'ongoing' })
+      await webrtc.answerCall(idNum, activeCall.callerId || convo?.otherId, activeCall.type)
+    } catch (e: any) {
+      alert(e.message || 'Error al contestar')
+      webrtc.cleanup()
+      setActiveCall(null)
+    }
   }
 
-  async function declineCall() {
+  function declineCall() {
     if (!activeCall || activeCall.isCaller) return
-    await api.put(`/api/calls?id=${activeCall.id}&status=declined`, { status: 'declined' }).catch(() => {})
+    webrtc.declineCall(idNum)
+    api.put(`/api/calls?id=${activeCall.id}&status=declined`, { status: 'declined' }).catch(() => {})
     setCallResult('Llamada rechazada')
     setActiveCall(null)
+    webrtc.cleanup()
+    setMuted(false)
     setTimeout(() => setCallResult(''), 2000)
   }
 
-  async function cancelCall() {
+  function cancelCall() {
     if (!activeCall) return
-    await api.put(`/api/calls?id=${activeCall.id}&status=${activeCall.isCaller ? 'ended' : 'declined'}`, { status: activeCall.isCaller ? 'ended' : 'declined' }).catch(() => {})
+    webrtc.endCall(idNum)
+    api.put(`/api/calls?id=${activeCall.id}&status=${activeCall.isCaller ? 'ended' : 'declined'}`, {
+      status: activeCall.isCaller ? 'ended' : 'declined',
+    }).catch(() => {})
     setCallResult(activeCall.isCaller ? 'Llamada cancelada' : 'Llamada finalizada')
     setActiveCall(null)
+    webrtc.cleanup()
+    setMuted(false)
     setTimeout(() => setCallResult(''), 2000)
+  }
+
+  function handleToggleMute() {
+    const isMuted = webrtc.toggleMute()
+    setMuted(isMuted)
+  }
+
+  function parseMsgJson(text: string): any {
+    if (!text || typeof text !== 'string') return null
+    let raw = text.trim()
+    try {
+      let p = JSON.parse(raw)
+      while (typeof p === 'string') { p = JSON.parse(p) }
+      if (p && typeof p === 'object' && p.type) return p
+    } catch {}
+    if (raw.includes('"type"') && raw.includes('"product_interest"')) {
+      try {
+        const cleaned = raw.replace(/\\\\/g, '\\').replace(/\\"/g, '"')
+        let p = JSON.parse(cleaned)
+        while (typeof p === 'string') { p = JSON.parse(p) }
+        if (p && typeof p === 'object' && p.type) return p
+      } catch {}
+    }
+    return null
+  }
+
+  function openSaleModal(productInfo: any) {
+    setSalePrice(String(productInfo.product_price))
+    setShowSaleModal(true)
+  }
+
+  function renderMessage(m: any) {
+    const parsed = parseMsgJson(m.text)
+    if (parsed?.type === 'product_interest') {
+      return <ProductCard data={parsed} onConfirm={user?.role === 'Vendedor' ? () => openSaleModal(parsed) : undefined} />
+    }
+    if (parsed?.type === 'sale_confirmed') {
+      return <SaleConfirmCard data={parsed} />
+    }
+    return (
+      <div style={{
+        maxWidth: '80%', padding: '8px 14px', borderRadius: 12,
+        background: m.from === 'me' ? 'rgba(212,168,67,0.12)' : 'rgba(255,255,255,0.06)',
+        border: m.from === 'me' ? '1px solid rgba(212,168,67,0.2)' : '1px solid rgba(255,255,255,0.06)',
+        fontSize: 13, lineHeight: 1.5
+      }}>
+        {m.text}
+      </div>
+    )
   }
 
   const mm = Math.floor(elapsed / 60).toString().padStart(2, '0')
@@ -272,6 +446,22 @@ export default function ConversationDetailPage() {
                     </div>
                     <div style={{ fontSize: 11, color: '#8B949E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 170 }}>{c.lastMsg}</div>
                   </div>
+                  <button onClick={async (e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    if (!confirm(`¿Eliminar conversación con ${c.name}?`)) return
+                    try {
+                      await api.del(`/api/conversations?id=${c.id}`)
+                      setConversations(prev => prev.filter(conv => conv.id !== c.id))
+                      if (c.id === idNum) router.push('/conversations')
+                    } catch (err: any) {
+                      alert(err.message || 'Error al eliminar')
+                    }
+                  }} style={{
+                    background: 'none', border: 'none', color: '#6a7580', cursor: 'pointer', padding: 4, fontSize: 10, flexShrink: 0, borderRadius: 4
+                  }} title="Eliminar">
+                    <i className="fas fa-trash" />
+                  </button>
                 </div>
               </Link>
             ))}
@@ -291,16 +481,26 @@ export default function ConversationDetailPage() {
                 width: 38, height: 38, borderRadius: '50%', background: 'var(--accent-amber)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#000'
               }}>{convo.avatar}</div>
-              {convo.online && <div style={{
-                position: 'absolute', bottom: 0, right: 0, width: 10, height: 10,
-                borderRadius: '50%', background: '#8B7D6B', border: '2px solid #1e2a3a'
-              }} />}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 600, fontSize: 14 }}>{convo.name}</div>
-              <div style={{ fontSize: 11, color: '#8B949E' }}>{convo.online ? 'En línea' : `Mensajería · ${convo.role}`}</div>
+              <div style={{ fontSize: 11, color: '#8B949E' }}>{convo.role}</div>
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={async () => {
+                if (!confirm('¿Eliminar esta conversación? Se borrarán todos los mensajes.')) return
+                try {
+                  await api.del(`/api/conversations?id=${idNum}`)
+                  router.push('/conversations')
+                } catch (e: any) {
+                  alert(e.message || 'Error al eliminar')
+                }
+              }} style={{
+                padding: '5px 10px', borderRadius: 6, background: 'rgba(139,64,64,0.1)',
+                color: '#8B4040', border: '1px solid rgba(139,64,64,0.2)', fontSize: 11, cursor: 'pointer'
+              }} title="Eliminar conversación">
+                <i className="fas fa-trash" />
+              </button>
               <button className="icon-btn" style={{ width: 32, height: 32, fontSize: 11 }} onClick={() => startCall('video')} title="Videollamada">
                 <i className="fas fa-video" />
               </button>
@@ -325,14 +525,7 @@ export default function ConversationDetailPage() {
                 display: 'flex', flexDirection: 'column',
                 alignItems: m.from === 'me' ? 'flex-end' : 'flex-start'
               }}>
-                <div style={{
-                  maxWidth: '80%', padding: '8px 14px', borderRadius: 12,
-                  background: m.from === 'me' ? 'rgba(212,168,67,0.12)' : 'rgba(255,255,255,0.06)',
-                  border: m.from === 'me' ? '1px solid rgba(212,168,67,0.2)' : '1px solid rgba(255,255,255,0.06)',
-                  fontSize: 13, lineHeight: 1.5
-                }}>
-                  {m.text}
-                </div>
+                {renderMessage(m)}
                 <span style={{ fontSize: 9, color: '#6a7580', marginTop: 2 }}>{m.time}</span>
               </div>
             ))}
@@ -355,19 +548,69 @@ export default function ConversationDetailPage() {
         </div>
       </div>
 
+      {showSaleModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(15,22,34,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#1e2a3a', border: '1px solid var(--border-color)', borderRadius: 14, padding: '24px 28px', maxWidth: 380, width: '90%' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>Confirmar Venta</h3>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 12, color: '#8B949E', display: 'block', marginBottom: 4 }}>Precio acordado ($)</label>
+              <input type="number" step="0.01" min="0" value={salePrice} onChange={e => setSalePrice(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', borderRadius: 8, color: '#fff', fontSize: 13, boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ marginBottom: 18 }}>
+              <label style={{ fontSize: 12, color: '#8B949E', display: 'block', marginBottom: 4 }}>Cantidad</label>
+              <input type="number" min="1" value={saleQty} onChange={e => setSaleQty(Number(e.target.value))}
+                style={{ width: '100%', padding: '8px 12px', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', borderRadius: 8, color: '#fff', fontSize: 13, boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setShowSaleModal(false)} style={{ flex: 1, padding: '9px', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', borderRadius: 8, color: '#8B949E', fontSize: 13, cursor: 'pointer' }}>
+                Cancelar
+              </button>
+              <button onClick={confirmSale} style={{ flex: 1, padding: '9px', background: '#4ade80', border: 'none', borderRadius: 8, color: '#000', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
+                <i className="fas fa-check" style={{ marginRight: 4 }} />Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {activeCall && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(15,22,34,0.97)',
           display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
           <div style={{ textAlign: 'center', padding: 24, maxWidth: 420, width: '100%' }}>
-            <div style={{
-              width: 90, height: 90, borderRadius: '50%', background: activeCall.type === 'video' ? 'rgba(212,168,67,0.15)' : 'var(--accent-amber)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
-              fontSize: 30, color: activeCall.type === 'video' ? '#D4A843' : '#000', border: activeCall.type === 'video' ? '2px solid rgba(212,168,67,0.4)' : 'none'
-            }}>
-              <i className={`fas ${activeCall.type === 'video' ? 'fa-video' : 'fa-phone'}`} />
-            </div>
+            {activeCall.type === 'video' && activeCall.status === 'ongoing' && (
+              <div style={{ position: 'relative', width: '100%', maxWidth: 360, aspectRatio: '4/3', borderRadius: 14, overflow: 'hidden', margin: '0 auto 16px', background: '#000', border: '2px solid rgba(212,168,67,0.4)' }}>
+                <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div style={{ position: 'absolute', bottom: 8, right: 8, width: 90, height: 68, borderRadius: 8, overflow: 'hidden', border: '2px solid rgba(212,168,67,0.6)', background: '#000' }}>
+                  <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
+                </div>
+              </div>
+            )}
+            {activeCall.type === 'voice' && activeCall.status === 'ongoing' && (
+              <audio ref={(el) => { if (el && webrtc.remoteStream) el.srcObject = webrtc.remoteStream }} autoPlay style={{ display: 'none' }} />
+            )}
+
+            {activeCall.type === 'video' && activeCall.status !== 'ongoing' && (
+              <div style={{
+                width: 90, height: 90, borderRadius: '50%', background: 'rgba(212,168,67,0.15)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
+                fontSize: 30, color: '#D4A843', border: '2px solid rgba(212,168,67,0.4)'
+              }}>
+                <i className="fas fa-video" />
+              </div>
+            )}
+            {activeCall.type === 'voice' && activeCall.status !== 'ongoing' && (
+              <div style={{
+                width: 90, height: 90, borderRadius: '50%', background: 'var(--accent-amber)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
+                fontSize: 30, color: '#000'
+              }}>
+                <i className="fas fa-phone" />
+              </div>
+            )}
+
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 2 }}>{convo.name}</div>
             <div style={{ fontSize: 13, color: '#8B949E', marginBottom: 20 }}>
               {activeCall.status === 'ongoing'
@@ -379,7 +622,7 @@ export default function ConversationDetailPage() {
             </div>
             {activeCall.status === 'ongoing' ? (
               <div style={{ display: 'flex', gap: 12, justifyContent: 'center', alignItems: 'center' }}>
-                <button onClick={() => setMuted(!muted)} style={{
+                <button onClick={handleToggleMute} style={{
                   width: 52, height: 52, borderRadius: '50%', border: '1px solid var(--border-color)',
                   background: muted ? 'rgba(212,168,67,0.15)' : 'rgba(255,255,255,0.06)', color: muted ? '#D4A843' : '#fff',
                   cursor: 'pointer', fontSize: 16
@@ -417,7 +660,7 @@ export default function ConversationDetailPage() {
               </div>
             )}
             <p style={{ marginTop: 18, fontSize: 11, color: '#6a7580' }}>
-              Llamada interna Krop Sale · sin número ni SIM
+              Llamada Krop Sale
             </p>
           </div>
         </div>
@@ -439,4 +682,11 @@ export default function ConversationDetailPage() {
       )}
     </Layout>
   )
+}
+
+interface CallCallbacks {
+  onIncomingCall?: (data: { conversationId: number; callerId: number; calleeId: number; type: 'voice' | 'video' }) => void
+  onCallAnswered?: (data: { conversationId: number; callerId: number }) => void
+  onCallDeclined?: (data: { conversationId: number }) => void
+  onCallEnded?: (data: { conversationId: number }) => void
 }

@@ -12,6 +12,7 @@ export default function SalesPage() {
   const [sales, setSales] = useState<any[]>([])
   const [filter, setFilter] = useState('all')
   const [loaded, setLoaded] = useState(false)
+  const isBuyer = user?.role === 'Comprador'
 
   useEffect(() => {
     if (!user?.id) return
@@ -25,24 +26,30 @@ export default function SalesPage() {
         ])
         const role = user.role
         const mine = all.filter((s: any) => {
-          const prod: any = prods.find((p: any) => p.id === s.product_id)
           if (role === 'Comprador') return s.buyer_id === user.id
-          if (role === 'Vendedor') return prod && prod.seller_id === user.id
+          if (role === 'Vendedor') {
+            const prod: any = prods.find((p: any) => p.id === s.product_id)
+            return prod && prod.seller_id === user.id
+          }
           return true
         })
         setSales(mine.map((s: any) => {
           const prod: any = prods.find((p: any) => p.id === s.product_id)
           const buyer: any = users.find((u: any) => u.id === s.buyer_id)
+          const seller: any = users.find((u: any) => u.id === s.seller_id)
           const rated = ratings.some((r: any) => r.sale_id === s.id)
           const qty = Number(s.quantity || 1)
-          const total = prod ? Number(prod.price) * qty : 0
+          const price = s.price_at_purchase ? Number(s.price_at_purchase) : (prod ? Number(prod.price) : 0)
+          const total = price * qty
           return {
             id: `V-${String(s.id).padStart(3, '0')}`,
             num: s.id,
+            productName: prod ? prod.title : '-',
             buyer: buyer ? `${buyer.firstName} ${buyer.lastName}` : '-',
+            seller: seller ? `${seller.firstName} ${seller.lastName}` : '-',
             items: qty,
             total: `$${total.toFixed(2)}`,
-            status: rated ? 'Completado' : 'Pendiente',
+            status: s.status || (rated ? 'Completado' : 'Pendiente'),
             date: fmtDate(s.created_at),
             viewable: true,
           }
@@ -61,7 +68,12 @@ export default function SalesPage() {
   })
 
   const totalAmount = sales.reduce((acc, s) => acc + parseFloat(s.total.replace('$', '') || '0'), 0)
-  const salesStats = [
+  const stats = isBuyer ? [
+    { label: 'Total Compras', value: `$${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, color: '#D4A843' },
+    { label: 'Completadas', value: String(sales.filter(s => s.status === 'Completado').length), color: '#8B7D6B' },
+    { label: 'Pendientes', value: String(sales.filter(s => s.status === 'Pendiente').length), color: '#4a5a6a' },
+    { label: 'Canceladas', value: String(sales.filter(s => s.status === 'Cancelado').length), color: '#8B4040' },
+  ] : [
     { label: 'Total Ventas', value: `$${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, color: '#D4A843' },
     { label: 'Completadas', value: String(sales.filter(s => s.status === 'Completado').length), color: '#8B7D6B' },
     { label: 'Pendientes', value: String(sales.filter(s => s.status === 'Pendiente').length), color: '#4a5a6a' },
@@ -74,12 +86,12 @@ export default function SalesPage() {
         background: 'var(--bg-card-alt)',
         borderRadius: 14, padding: '16px 18px', marginBottom: 14
       }}>
-        <h1 style={{ fontSize: 19, fontWeight: 700, marginBottom: 4 }}>Ventas</h1>
-        <p style={{ color: '#8B949E', fontSize: 12 }}>Registro de ventas realizadas.</p>
+        <h1 style={{ fontSize: 19, fontWeight: 700, marginBottom: 4 }}>{isBuyer ? 'Compras' : 'Ventas'}</h1>
+        <p style={{ color: '#8B949E', fontSize: 12 }}>{isBuyer ? 'Tus compras realizadas.' : 'Registro de ventas realizadas.'}</p>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10, marginBottom: 16 }}>
-        {salesStats.map(s => (
+        {stats.map(s => (
           <div key={s.label} style={{ background: '#1e2a3a', borderRadius: 10, padding: '10px 12px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: s.color, fontFamily: 'Inter' }}>{s.value}</div>
             <div style={{ fontSize: 10, color: '#8B949E', marginTop: 2 }}>{s.label}</div>
@@ -99,7 +111,7 @@ export default function SalesPage() {
       {loaded && filtered.length === 0 && (
         <div style={{ padding: '30px 20px', textAlign: 'center', color: '#6a7580', fontSize: 13, background: '#1e2a3a', borderRadius: 10, border: '1px solid var(--border-color)' }}>
           <i className="fas fa-receipt" style={{ fontSize: 24, display: 'block', marginBottom: 8, color: 'rgba(212,168,67,0.3)' }} />
-          No hay ventas {filter !== 'all' ? 'con ese estado' : 'todavía'}.
+          No hay {isBuyer ? 'compras' : 'ventas'} {filter !== 'all' ? 'con ese estado' : 'todavía'}.
         </div>
       )}
 
@@ -108,8 +120,10 @@ export default function SalesPage() {
           <thead>
             <tr>
               <th>ID</th>
-              <th className="hide-mob">Comprador</th>
-              <th>Items</th>
+              <th>Producto</th>
+              {!isBuyer && <th className="hide-mob">Comprador</th>}
+              {isBuyer && <th className="hide-mob">Vendedor</th>}
+              <th>Cant.</th>
               <th>Total</th>
               <th className="hide-mob">Estado</th>
               <th>Fecha</th>
@@ -124,12 +138,13 @@ export default function SalesPage() {
               return (
                 <tr key={s.id}>
                   <td style={{ fontWeight: 600, fontSize: 12, fontFamily: 'Inter' }}>{s.id}</td>
-                  <td className="hide-mob" style={{ fontSize: 12, color: '#8B949E' }}>{s.buyer}</td>
+                  <td style={{ fontSize: 12 }}>{s.productName}</td>
+                  <td className="hide-mob" style={{ fontSize: 12, color: '#8B949E' }}>{isBuyer ? s.seller : s.buyer}</td>
                   <td style={{ fontSize: 12, fontFamily: 'Inter' }}>{s.items}</td>
                   <td style={{ fontSize: 12, color: '#D4A843', fontWeight: 600, fontFamily: 'Inter' }}>{s.total}</td>
                   <td className="hide-mob">
-                    <span className="status-badge" style={{ fontSize: 9, background: `${statusColors[s.status]}20`, color: statusColors[s.status] }}>
-                      <span className="badge-dot" style={{ background: statusColors[s.status] }} />
+                    <span className="status-badge" style={{ fontSize: 9, background: `${statusColors[s.status] || '#4a5a6a'}20`, color: statusColors[s.status] || '#4a5a6a' }}>
+                      <span className="badge-dot" style={{ background: statusColors[s.status] || '#4a5a6a' }} />
                       {s.status}
                     </span>
                   </td>

@@ -35,11 +35,21 @@ export default function ConversationsPage() {
           const unread = convMsgs.filter((m: any) => m.sender_id !== user.id && !Number(m.is_read)).length
           const prod: any = prods.find((p: any) => p.id === c.product_id)
           const fullName = other ? `${other.firstName} ${other.lastName}` : 'Usuario'
+          let preview = last ? last.content : (prod ? `Interés en: ${prod.title}` : 'Sin mensajes todavía')
+          try {
+            let txt = preview
+            if (typeof txt === 'string') {
+              let p = JSON.parse(txt)
+              while (typeof p === 'string') { p = JSON.parse(p) }
+              if (p?.type === 'product_interest') preview = `Producto: ${p.product_name}`
+              else if (p?.type === 'sale_confirmed') preview = `Venta confirmada: ${p.product_name}`
+            }
+          } catch {}
           return {
             id: c.id,
             name: fullName,
             avatar: initials(fullName),
-            lastMsg: last ? last.content : (prod ? `Interés en: ${prod.title}` : 'Sin mensajes todavía'),
+            lastMsg: preview || 'Sin mensajes todavía',
             time: last ? fmtTime(last.sent_at) : 'Nuevo',
             unread,
             online: false,

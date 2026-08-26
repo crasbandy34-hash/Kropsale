@@ -8,16 +8,16 @@ const REGISTRABLE_ROLES = ['Vendedor', 'Comprador']
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireAuth(request)
     let isAdmin = false
+    const auth = await requireAuth(request)
     if (!(auth instanceof NextResponse) && auth.user?.role === 'Administrador') {
       isAdmin = true
     }
     const rows = await query(
-      'SELECT u.id, u.first_name, u.last_name, u.email, u.location, r.name AS role, u.role_id, u.is_active, u.created_at FROM users u LEFT JOIN roles r ON r.id = u.role_id'
+      'SELECT u.id, u.first_name, u.last_name, u.email, u.location, u.profile_image, r.name AS role, u.role_id, u.is_active, u.created_at FROM users u LEFT JOIN roles r ON r.id = u.role_id'
     )
     const users = rows.map((r: any) => {
-      const base: any = { id: r.id, firstName: r.first_name, lastName: r.last_name, location: r.location, role: r.role }
+      const base: any = { id: r.id, firstName: r.first_name, lastName: r.last_name, location: r.location, profileImage: r.profile_image || null, role: r.role }
       if (isAdmin) {
         base.email = r.email
         base.isActive = !!r.is_active
@@ -55,25 +55,24 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const auth = await requireAuth(request)
   if (auth instanceof NextResponse) return auth
-  const denied = requireRole(auth.user, ['Administrador'])
-  if (denied) return denied
   try {
     const { searchParams } = new URL(request.url)
     const id = parseInt(searchParams.get('id') || '0')
     if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 })
     const data = await request.json()
+    const isAdmin = auth.user?.role === 'Administrador'
+    const isSelf = auth.user?.id === id
+    if (!isAdmin && !isSelf) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
     const target = await getOne('SELECT u.id, r.name AS role FROM users u LEFT JOIN roles r ON r.id = u.role_id WHERE u.id = ?', [id])
     if (!target) return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })
-    if (target.role === 'Administrador' && data.role && data.role !== 'Administrador') {
-      return NextResponse.json({ error: 'No se puede cambiar el rol del Administrador' }, { status: 400 })
-    }
     const updates: string[] = []
     const params: any[] = []
     if (data.firstName) { updates.push('first_name = ?'); params.push(data.firstName) }
     if (data.lastName) { updates.push('last_name = ?'); params.push(data.lastName) }
-    if (data.email) { updates.push('email = ?'); params.push(data.email) }
+    if (data.email && isAdmin) { updates.push('email = ?'); params.push(data.email) }
     if (data.location !== undefined) { updates.push('location = ?'); params.push(data.location) }
-    if (data.role !== undefined) {
+    if (data.profileImage !== undefined) { updates.push('profile_image = ?'); params.push(data.profileImage) }
+    if (data.role !== undefined && isAdmin) {
       const role = await getOne('SELECT id, name FROM roles WHERE name = ?', [data.role])
       if (!role) return NextResponse.json({ error: `Rol no encontrado: ${data.role}` }, { status: 400 })
       if (role.name === 'Administrador') {
@@ -83,7 +82,7 @@ export async function PUT(request: NextRequest) {
       updates.push('role_id = ?')
       params.push(role.id)
     }
-    if (data.isActive !== undefined) { updates.push('is_active = ?'); params.push(data.isActive) }
+    if (data.isActive !== undefined && isAdmin) { updates.push('is_active = ?'); params.push(data.isActive) }
     if (data.password) {
       const salt = await bcrypt.genSalt()
       const passwordHash = await bcrypt.hash(data.password, salt)

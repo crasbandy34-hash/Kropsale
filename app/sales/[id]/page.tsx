@@ -2,15 +2,22 @@
 import { useParams, useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
 import { useApi, fmtDate } from '@/lib/apiClient'
+import { useAuth } from '@/context/AuthContext'
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 
 export default function SaleDetailPage() {
   const { id } = useParams()
   const router = useRouter()
+  const { user } = useAuth()
   const api = useApi()
   const [sale, setSale] = useState<any>(null)
   const [notFound, setNotFound] = useState(false)
+  const [showRating, setShowRating] = useState(false)
+  const [ratingScore, setRatingScore] = useState(0)
+  const [ratingComment, setRatingComment] = useState('')
+  const [ratingHover, setRatingHover] = useState(0)
+  const [alreadyRated, setAlreadyRated] = useState(false)
 
   useEffect(() => {
     ;(async () => {
@@ -25,23 +32,49 @@ export default function SaleDetailPage() {
         if (!s) { setNotFound(true); return }
         const prod: any = prods.find((p: any) => p.id === s.product_id)
         const buyer: any = users.find((u: any) => u.id === s.buyer_id)
+        const seller: any = users.find((u: any) => u.id === (s.seller_id || prod?.seller_id))
         const rated = ratings.some((r: any) => r.sale_id === s.id)
+        setAlreadyRated(rated)
         const qty = Number(s.quantity || 1)
-        const price = prod ? Number(prod.price) : 0
+        const price = s.price_at_purchase ? Number(s.price_at_purchase) : (prod ? Number(prod.price) : 0)
         setSale({
           id: `V-${String(s.id).padStart(3, '0')}`,
+          numId: s.id,
+          productId: s.product_id,
+          productName: prod?.title || '-',
           buyer: buyer ? `${buyer.firstName} ${buyer.lastName}` : '-',
           email: buyer?.email || '-',
+          sellerId: s.seller_id || prod?.seller_id,
+          sellerName: seller ? `${seller.firstName} ${seller.lastName}` : '-',
           date: fmtDate(s.created_at),
-          status: rated ? 'Completado' : 'Pendiente',
+          status: s.status || (rated ? 'Completado' : 'Pendiente'),
           subtotal: `$${(price * qty).toFixed(2)}`,
           shipping: '$0.00',
           total: `$${(price * qty).toFixed(2)}`,
-          items: prod ? [{ name: prod.title, qty, price: `$${price.toFixed(2)}`, total: `$${(price * qty).toFixed(2)}` }] : [],
+          items: [{ name: prod?.title || '-', qty, price: `$${price.toFixed(2)}`, total: `$${(price * qty).toFixed(2)}` }],
         })
       } catch { setNotFound(true) }
     })()
   }, [id])
+
+  async function submitRating() {
+    if (!user?.id || !sale || ratingScore === 0) { alert('Selecciona una calificación'); return }
+    try {
+      await api.post('/api/ratings', {
+        sale_id: sale.numId,
+        reviewer_id: user.id,
+        reviewee_id: sale.sellerId,
+        score: ratingScore,
+        comment: ratingComment || null,
+      })
+      setAlreadyRated(true)
+      setShowRating(false)
+      setSale({ ...sale, status: 'Completado' })
+      alert('¡Calificación enviada!')
+    } catch (e: any) {
+      alert(e.message || 'Error al calificar')
+    }
+  }
 
   if (notFound) {
     return (
@@ -135,6 +168,57 @@ export default function SaleDetailPage() {
           </table>
         </div>
       </div>
+
+      {user?.role === 'Comprador' && !alreadyRated && (
+        <div style={{ marginTop: 14 }}>
+          {!showRating ? (
+            <button onClick={() => setShowRating(true)} style={{
+              width: '100%', padding: '10px', background: 'rgba(212,168,67,0.1)', border: '1px solid rgba(212,168,67,0.2)',
+              borderRadius: 8, color: '#D4A843', fontSize: 13, cursor: 'pointer', fontWeight: 600
+            }}>
+              <i className="fas fa-star" style={{ marginRight: 6 }} />Calificar al vendedor
+            </button>
+          ) : (
+            <div style={{ background: '#1e2a3a', borderRadius: 10, padding: 16, border: '1px solid rgba(212,168,67,0.2)' }}>
+              <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Calificar a {sale.sellerName}</h3>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                {[1, 2, 3, 4, 5].map(i => (
+                  <button key={i} onClick={() => setRatingScore(i)}
+                    onMouseEnter={() => setRatingHover(i)}
+                    onMouseLeave={() => setRatingHover(0)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
+                    <i className="fas fa-star" style={{
+                      fontSize: 24,
+                      color: i <= (ratingHover || ratingScore) ? '#D4A843' : 'rgba(255,255,255,0.15)'
+                    }} />
+                  </button>
+                ))}
+              </div>
+              <textarea placeholder="Comentario (opcional)" value={ratingComment} onChange={e => setRatingComment(e.target.value)}
+                rows={3} style={{
+                  width: '100%', padding: '8px 12px', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)',
+                  borderRadius: 8, color: '#fff', fontSize: 13, resize: 'vertical', marginBottom: 12, boxSizing: 'border-box'
+                }} />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => { setShowRating(false); setRatingScore(0); setRatingComment('') }} style={{
+                  flex: 1, padding: '9px', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)',
+                  borderRadius: 8, color: '#8B949E', fontSize: 13, cursor: 'pointer'
+                }}>Cancelar</button>
+                <button onClick={submitRating} style={{
+                  flex: 1, padding: '9px', background: '#D4A843', border: 'none',
+                  borderRadius: 8, color: '#000', fontSize: 13, cursor: 'pointer', fontWeight: 600
+                }}><i className="fas fa-star" style={{ marginRight: 4 }} />Enviar</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {user?.role === 'Comprador' && alreadyRated && (
+        <div style={{ marginTop: 14, padding: '10px 14px', background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 8, textAlign: 'center', color: '#4ade80', fontSize: 12 }}>
+          <i className="fas fa-check-circle" style={{ marginRight: 4 }} />Ya calificaste esta venta
+        </div>
+      )}
     </Layout>
   )
 }
