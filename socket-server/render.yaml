@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: kopsale-socket
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node index.js
+    healthCheckPath: /health
+    envVars:
+      - key: JWT_SECRET
+        sync: false
+      - key: ALLOWED_ORIGIN
+        sync: false

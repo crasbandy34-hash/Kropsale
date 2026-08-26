@@ -29,6 +29,10 @@ export default function GlobalCallListener({ children }: { children: React.React
     const socket = io(url, {
       transports: ['websocket', 'polling'],
       auth: token ? { token } : undefined,
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 10000,
     })
     socketRef.current = socket
 

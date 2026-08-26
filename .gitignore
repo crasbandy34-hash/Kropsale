@@ -28,3 +28,4 @@ npm-debug.log*
 # script local de seed con credenciales de demo
 /scripts/seed.js
 
+.vercel
